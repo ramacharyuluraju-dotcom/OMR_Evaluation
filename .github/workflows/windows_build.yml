@@ -5,7 +5,6 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-# This silences the harmless GitHub Node.js server warning
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
@@ -27,19 +26,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install flet pyinstaller pandas opencv-python-headless pymupdf reportlab pyzbar
 
-    - name: Verify Repository Files (Debugging)
-      run: |
-        echo "Looking for Python files in the repository..."
-        dir
-
     - name: Build Executable with Flet
       run: |
-        # NOTE: If your file is named main.py instead of AMC_Exam_Suite.py, change the name below!
-        flet pack AMC_Exam_Suite.py --name "AMC_Exam_Suite" --hide-console
+        # Removed the invalid --hide-console argument!
+        flet pack AMC_Exam_Suite.py --name "AMC_Exam_Suite"
 
     - name: Upload Artifact
-      # Only attempts to upload if the build succeeds
-      if: success() 
       uses: actions/upload-artifact@v4
       with:
         name: AMC_Exam_Suite_Windows_App
