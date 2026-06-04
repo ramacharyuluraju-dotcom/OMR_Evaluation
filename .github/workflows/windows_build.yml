@@ -5,13 +5,12 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-# This silences the GitHub Node.js 20 deprecation warning
+# Silences the GitHub Node.js deprecation warning
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
-    # Explicitly call windows-2022 to avoid the redirect warning for now
     runs-on: windows-2022 
 
     steps:
@@ -26,13 +25,13 @@ jobs:
     - name: Install System Dependencies
       run: |
         python -m pip install --upgrade pip
-        # We explicitly add 'pyinstaller' so Flet has the engine it needs to build the .exe
+        # We install pyinstaller alongside Flet so the compiler engine is present
         pip install flet pyinstaller pandas opencv-python-headless pymupdf reportlab pyzbar
 
     - name: Build Executable with Flet
       run: |
-        # Using 'python -m flet' prevents the "command not found" PATH crash on Windows
-        python -m flet pack AMC_Exam_Suite.py --name "AMC_Exam_Suite" --hide-console
+        # Calling the standard Flet CLI now that PyInstaller is installed
+        flet pack AMC_Exam_Suite.py --name "AMC_Exam_Suite" --hide-console
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
