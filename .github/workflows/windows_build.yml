@@ -28,8 +28,8 @@ jobs:
 
     - name: Build Executable with Flet
       run: |
-        # Removed the invalid --hide-console argument!
-        flet pack AMC_Exam_Suite.py --name "AMC_Exam_Suite"
+        # We use --hidden-import to force the compiler to keep the reportlab barcode files!
+        flet pack AMC_Exam_Suite.py --name "AMC_Exam_Suite" --hidden-import reportlab.graphics.barcode.code128 --hidden-import reportlab.graphics.barcode.code93 --hidden-import reportlab.graphics.barcode.code39 --hidden-import reportlab.graphics.barcode.usps --hidden-import reportlab.graphics.barcode.usps4s --hidden-import reportlab.graphics.barcode.ecc200
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
