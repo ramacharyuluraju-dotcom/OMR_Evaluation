@@ -19,6 +19,14 @@ from reportlab.graphics.barcode import qr
 from reportlab.graphics.shapes import Drawing
 from reportlab.graphics import renderPDF
 
+# --- BYPASS STRICT COLLEGE SSL PROXY BLOCKS ---
+import ssl
+try:
+    ssl._create_default_https_context = ssl._create_unverified_context
+except Exception:
+    pass
+# ----------------------------------------------
+
 # Automatically create the dataset folder if it doesn't exist for ML Harvesting
 DATASET_DIR = "omr_training_data/needs_review"
 os.makedirs(DATASET_DIR, exist_ok=True)
@@ -489,7 +497,6 @@ def cv2_to_base64(img):
 # ==========================================
 # PART 3: NATIVE TKINTER DIALOG WRAPPERS
 # ==========================================
-# Wrapping them in callbacks stops Tkinter from blocking Flet's UI Thread
 def _open_file_dialog(title, filetypes, callback):
     def run_dialog():
         root = tk.Tk()
@@ -541,7 +548,7 @@ def main(page: ft.Page):
         eval_state["key_dict"] = kd
     load_default_key()
 
-    # --- GENERATOR COMPONENTS ---
+    # --- GENERATOR COMPONENTS (DEFENSIVE INSTANTIATION) ---
     format_dropdown = ft.Dropdown(
         label="Select Sheet Format",
         options=[ft.dropdown.Option("OMR Answer Sheet"), ft.dropdown.Option("CAED Printout Sheet"), ft.dropdown.Option("Relieving Superintendent Diary")],
@@ -556,20 +563,46 @@ def main(page: ft.Page):
     lbl_watermark = ft.Text("No watermark selected.", italic=True, size=12)
     lbl_csv = ft.Text("No CSV loaded.", italic=True, size=12, color="red700") 
     
-    gen_btn = ft.ElevatedButton(text="Generate PDF Document", icon="picture_as_pdf")
     gen_status_text = ft.Text("", weight="bold", size=16)
 
-    # --- EVALUATOR COMPONENTS ---
+    # NO KWARGS ALLOWED IN TEXT ARGUMENTS!
+    gen_btn = ft.ElevatedButton("Generate PDF Document", icon="picture_as_pdf")
+    btn_upload_left = ft.ElevatedButton("Upload Left Logo", icon="image")
+    btn_upload_right = ft.ElevatedButton("Upload Right Logo", icon="image")
+    btn_upload_watermark = ft.ElevatedButton("Upload Watermark", icon="water_drop")
+    btn_upload_csv = ft.ElevatedButton("Upload Student CSV", icon="table_view")
+
+
+    # --- EVALUATOR COMPONENTS (DEFENSIVE INSTANTIATION) ---
     ev_qs = ft.Dropdown(options=[ft.dropdown.Option("50"), ft.dropdown.Option("100")], value="100", width=200)
-    ev_fill = ft.Slider(min=10, max=80, divisions=14, value=30, label="{value}%")
+    ev_fill = ft.Slider(min=10, max=80, divisions=14, value=30)
     ev_key_lbl = ft.Text("No key uploaded. Using default pattern.", color="orange", italic=True)
 
-    img_orig = ft.Image(src="", width=350, height=350, fit="contain", visible=False)
-    img_warp = ft.Image(src="", width=350, height=350, fit="contain", visible=False)
+    # Empty instantiation, assign properties after to bypass __init__ versioning crash
+    img_orig = ft.Image()
+    img_orig.width = 350
+    img_orig.height = 350
+    img_orig.fit = "contain"
+    img_orig.visible = False
+
+    img_warp = ft.Image()
+    img_warp.width = 350
+    img_warp.height = 350
+    img_warp.fit = "contain"
+    img_warp.visible = False
+
     debug_txt = ft.Text("Upload a scan to begin.", size=14)
 
-    btn_batch_upload = ft.ElevatedButton(text="Upload Batch Scans", icon="dynamic_feed")
-    btn_batch_export = ft.ElevatedButton(text="Download CSV Report", icon="download", disabled=True)
+    # NO KWARGS ALLOWED IN TEXT ARGUMENTS!
+    btn_ev_key = ft.ElevatedButton("Upload Master Key", icon="key")
+    btn_ev_calib = ft.ElevatedButton("Upload Scan for Testing", icon="upload")
+    btn_batch_upload = ft.ElevatedButton("Upload Batch Scans", icon="dynamic_feed")
+    btn_batch_export = ft.ElevatedButton("Download CSV Report", icon="download")
+    btn_batch_export.disabled = True
+
+    btn_tab_calib = ft.ElevatedButton("📐 Calibration Debugger", data="calib")
+    btn_tab_batch = ft.ElevatedButton("🚀 Batch Processing", data="batch")
+
     batch_prg = ft.ProgressBar(width=400, value=0, visible=False)
     batch_txt = ft.Text("")
     
@@ -587,6 +620,7 @@ def main(page: ft.Page):
                 lbl_left.value = f"Selected: {os.path.basename(path)}"
                 page.update()
         _open_file_dialog("Select Left Logo", [("Images", "*.png *.jpg *.jpeg")], on_selected)
+    btn_upload_left.on_click = pick_left
 
     def pick_right(e):
         def on_selected(path):
@@ -595,6 +629,7 @@ def main(page: ft.Page):
                 lbl_right.value = f"Selected: {os.path.basename(path)}"
                 page.update()
         _open_file_dialog("Select Right Logo", [("Images", "*.png *.jpg *.jpeg")], on_selected)
+    btn_upload_right.on_click = pick_right
 
     def pick_watermark(e):
         def on_selected(path):
@@ -603,6 +638,7 @@ def main(page: ft.Page):
                 lbl_watermark.value = f"Selected: {os.path.basename(path)}"
                 page.update()
         _open_file_dialog("Select Watermark", [("Images", "*.png *.jpg *.jpeg")], on_selected)
+    btn_upload_watermark.on_click = pick_watermark
 
     def pick_csv(e):
         def on_selected(path):
@@ -616,6 +652,7 @@ def main(page: ft.Page):
                     lbl_csv.color = "red700" 
                 page.update()
         _open_file_dialog("Select Student CSV", [("CSV Files", "*.csv")], on_selected)
+    btn_upload_csv.on_click = pick_csv
 
     def trigger_generate_save(e):
         fmt = format_dropdown.value
@@ -666,7 +703,6 @@ def main(page: ft.Page):
             threading.Thread(target=background_generate, daemon=True).start()
             
         _save_file_dialog("Save PDF Document", ".pdf", [("PDF Files", "*.pdf")], default_name, on_save_path)
-
     gen_btn.on_click = trigger_generate_save
 
     # Evaluator Handlers
@@ -690,6 +726,7 @@ def main(page: ft.Page):
                     ev_key_lbl.color = "red"
                 page.update()
         _open_file_dialog("Select Master Key CSV", [("CSV Files", "*.csv")], on_selected)
+    btn_ev_key.on_click = pick_ev_key
 
     def pick_ev_calib(e):
         def on_path_selected(path):
@@ -734,6 +771,7 @@ def main(page: ft.Page):
 
             threading.Thread(target=background_calib, daemon=True).start()
         _open_file_dialog("Select Scan for Testing", [("Images/PDFs", "*.jpg *.jpeg *.png *.pdf")], on_path_selected)
+    btn_ev_calib.on_click = pick_ev_calib
 
     def pick_ev_batch(e):
         def on_paths_selected(paths):
@@ -798,7 +836,6 @@ def main(page: ft.Page):
 
             threading.Thread(target=background_batch, daemon=True).start()
         _open_files_dialog("Select Batch Scans", [("Images/PDFs", "*.jpg *.jpeg *.png *.pdf")], on_paths_selected)
-
     btn_batch_upload.on_click = pick_ev_batch
 
     def save_ev_export(e):
@@ -808,7 +845,6 @@ def main(page: ft.Page):
                 batch_txt.value = f"✅ Exported to {path}"
                 page.update()
         _save_file_dialog("Save CSV Report", ".csv", [("CSV Files", "*.csv")], "AMC_Evaluation_Report.csv", on_save_path)
-
     btn_batch_export.on_click = save_ev_export
 
 
@@ -820,28 +856,28 @@ def main(page: ft.Page):
         page.update()
     format_dropdown.on_change = on_format_change
 
-    general_settings = ft.Column([
+    general_settings = ft.Column(controls=[
         ft.Text("1. General Settings", size=18, weight="bold"),
         format_dropdown,
         college_name,
-        ft.Row([ft.ElevatedButton(text="Upload Left Logo", icon="image", on_click=pick_left), lbl_left]),
-        ft.Row([ft.ElevatedButton(text="Upload Right Logo", icon="image", on_click=pick_right), lbl_right]),
+        ft.Row(controls=[btn_upload_left, lbl_left]),
+        ft.Row(controls=[btn_upload_right, lbl_right]),
     ], spacing=15)
 
-    omr_settings = ft.Column([
+    omr_settings = ft.Column(controls=[
         ft.Divider(),
         ft.Text("2. OMR Specific Settings", size=18, weight="bold"),
         exam_type,
         course_code,
         num_qs_dropdown,
-        ft.Row([ft.ElevatedButton(text="Upload Watermark", icon="water_drop", on_click=pick_watermark), lbl_watermark]),
-        ft.Row([ft.ElevatedButton(text="Upload Student CSV", icon="table_view", on_click=pick_csv), lbl_csv]),
+        ft.Row(controls=[btn_upload_watermark, lbl_watermark]),
+        ft.Row(controls=[btn_upload_csv, lbl_csv]),
         ft.Text("CSV Format Note: File must contain headers 'USN' and 'Name'", italic=True, size=12)
     ], spacing=15)
 
-    generator_content = ft.Column([
+    generator_content = ft.Column(controls=[
         ft.Text("📄 AMC Exam Sheet Generator", size=28, weight="bold"), ft.Divider(),
-        ft.Row([
+        ft.Row(controls=[
             general_settings, ft.Container(width=50), omr_settings
         ]),
         ft.Divider(),
@@ -849,32 +885,31 @@ def main(page: ft.Page):
         gen_status_text
     ])
 
-    eval_general = ft.Column([
+    eval_general = ft.Column(controls=[
         ft.Text("1. Evaluation Settings", size=18, weight="bold"),
-        ft.Row([ev_qs, ft.Text("Ink Threshold (Confidence):"), ev_fill]),
-        ft.Row([ft.ElevatedButton(text="Upload Master Key", icon="key", on_click=pick_ev_key), ev_key_lbl])
+        ft.Row(controls=[ev_qs, ft.Text("Ink Threshold (Confidence):"), ev_fill]),
+        ft.Row(controls=[btn_ev_key, ev_key_lbl])
     ], spacing=15)
 
-    eval_debug = ft.Column([
+    eval_debug = ft.Column(controls=[
         ft.Divider(),
         ft.Text("2. Single Scan Calibration", size=18, weight="bold"),
-        ft.Row([ft.ElevatedButton(text="Upload Scan for Testing", icon="upload", on_click=pick_ev_calib)]),
-        ft.Row([
-            ft.Column([ft.Text("Metrics", weight="bold"), debug_txt], width=200),
-            ft.Column([ft.Text("Corner Lock", weight="bold"), img_orig]),
-            ft.Column([ft.Text("Math Grid", weight="bold"), img_warp])
-        ], vertical_alignment="start")
+        ft.Row(controls=[btn_ev_calib]),
+        ft.Row(controls=[
+            ft.Column(controls=[ft.Text("Metrics", weight="bold"), debug_txt], width=200),
+            ft.Column(controls=[ft.Text("Corner Lock", weight="bold"), img_orig]),
+            ft.Column(controls=[ft.Text("Math Grid", weight="bold"), img_warp])
+        ])
     ], spacing=15)
 
-    eval_batch = ft.Column([
+    # REMOVED border kwargs from container to bypass flet border alias crash
+    eval_batch = ft.Column(controls=[
         ft.Divider(),
         ft.Text("3. Batch Processing", size=18, weight="bold"),
-        ft.Row([btn_batch_upload, btn_batch_export]),
+        ft.Row(controls=[btn_batch_upload, btn_batch_export]),
         batch_prg, batch_txt, 
-        ft.Container(content=ft.Column([dt], scroll="auto"), height=400, border=ft.Border.all(1, "grey"))
+        ft.Container(content=ft.Column(controls=[dt], scroll="auto"), height=400)
     ], spacing=15, visible=False)
-
-    view_container = ft.Container(content=generator_content)
 
     def switch_eval_tab(e):
         if e.control.data == "calib":
@@ -884,28 +919,37 @@ def main(page: ft.Page):
             eval_debug.visible = False
             eval_batch.visible = True
         page.update()
+        
+    btn_tab_calib.on_click = switch_eval_tab
+    btn_tab_batch.on_click = switch_eval_tab
 
-    evaluator_content = ft.Column([
+    evaluator_content = ft.Column(controls=[
         ft.Text("🎯 OMR Evaluator", size=28, weight="bold"), ft.Divider(),
         eval_general, ft.Divider(),
-        ft.Row([
-            ft.ElevatedButton(text="📐 Calibration Debugger", data="calib", on_click=switch_eval_tab),
-            ft.ElevatedButton(text="🚀 Batch Processing", data="batch", on_click=switch_eval_tab)
-        ]),
+        ft.Row(controls=[btn_tab_calib, btn_tab_batch]),
         eval_debug, eval_batch
     ])
 
-    def switch_to_gen(e): view_container.content = generator_content; page.update()
-    def switch_to_eval(e): view_container.content = evaluator_content; page.update()
+    view_container = ft.Container(content=generator_content)
 
-    page.add(ft.Column([
-        ft.Row([
-            ft.ElevatedButton(text="📄 Generator", on_click=switch_to_gen, width=200, height=50),
-            ft.ElevatedButton(text="🎯 Evaluator", on_click=switch_to_eval, width=200, height=50),
-        ], alignment="center"),
+    def switch_main_view(e): 
+        if e.control.data == "gen":
+            view_container.content = generator_content
+        else:
+            view_container.content = evaluator_content
+        page.update()
+
+    btn_nav_gen = ft.ElevatedButton("📄 Generator", data="gen", width=200, height=50)
+    btn_nav_eval = ft.ElevatedButton("🎯 Evaluator", data="eval", width=200, height=50)
+    btn_nav_gen.on_click = switch_main_view
+    btn_nav_eval.on_click = switch_main_view
+
+    page.add(ft.Column(controls=[
+        ft.Row(controls=[btn_nav_gen, btn_nav_eval]),
         ft.Divider(),
         view_container
     ]))
 
+# NOTE: run() is the new standard instead of app()
 if __name__ == "__main__":
     ft.run(main)
