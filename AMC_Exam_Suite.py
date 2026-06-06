@@ -546,7 +546,7 @@ def main(page: ft.Page):
         eval_state["key_dict"] = kd
     load_default_key()
 
-    # --- GENERATOR COMPONENTS (DEFENSIVE INSTANTIATION) ---
+    # --- GENERATOR COMPONENTS ---
     format_dropdown = ft.Dropdown(
         label="Select Sheet Format",
         options=[ft.dropdown.Option("OMR Answer Sheet"), ft.dropdown.Option("CAED Printout Sheet"), ft.dropdown.Option("Relieving Superintendent Diary")],
@@ -562,33 +562,18 @@ def main(page: ft.Page):
     lbl_csv = ft.Text("No CSV loaded.", italic=True, size=12, color="red700") 
     gen_status_text = ft.Text("", weight="bold", size=16)
 
-    # Empty Text property bypassing flet version bugs
-    gen_btn = ft.ElevatedButton()
-    gen_btn.text = "Generate PDF Document"
-    gen_btn.icon = "picture_as_pdf"
+    # Fixed Instantiations
+    gen_btn = ft.ElevatedButton(text="Generate PDF Document", icon="picture_as_pdf")
+    btn_upload_left = ft.ElevatedButton(text="Upload Left Logo", icon="image")
+    btn_upload_right = ft.ElevatedButton(text="Upload Right Logo", icon="image")
+    btn_upload_watermark = ft.ElevatedButton(text="Upload Watermark", icon="water_drop")
+    btn_upload_csv = ft.ElevatedButton(text="Upload Student CSV", icon="table_view")
 
-    btn_upload_left = ft.ElevatedButton()
-    btn_upload_left.text = "Upload Left Logo"
-    btn_upload_left.icon = "image"
-
-    btn_upload_right = ft.ElevatedButton()
-    btn_upload_right.text = "Upload Right Logo"
-    btn_upload_right.icon = "image"
-
-    btn_upload_watermark = ft.ElevatedButton()
-    btn_upload_watermark.text = "Upload Watermark"
-    btn_upload_watermark.icon = "water_drop"
-
-    btn_upload_csv = ft.ElevatedButton()
-    btn_upload_csv.text = "Upload Student CSV"
-    btn_upload_csv.icon = "table_view"
-
-    # --- EVALUATOR COMPONENTS (DEFENSIVE INSTANTIATION) ---
+    # --- EVALUATOR COMPONENTS ---
     ev_qs = ft.Dropdown(options=[ft.dropdown.Option("50"), ft.dropdown.Option("100")], value="100", width=200)
     ev_fill = ft.Slider(min=10, max=80, divisions=14, value=30)
     ev_key_lbl = ft.Text("No key uploaded. Using default pattern.", color="orange", italic=True)
 
-    # Empty string inside parenthesis bypasses Flet version constructor crashing
     img_orig = ft.Image("")
     img_orig.width = 350
     img_orig.height = 350
@@ -603,22 +588,11 @@ def main(page: ft.Page):
 
     debug_txt = ft.Text("Upload a scan to begin.", size=14)
 
-    btn_ev_key = ft.ElevatedButton()
-    btn_ev_key.text = "Upload Master Key"
-    btn_ev_key.icon = "key"
-
-    btn_ev_calib = ft.ElevatedButton()
-    btn_ev_calib.text = "Upload Scan for Testing"
-    btn_ev_calib.icon = "upload"
-
-    btn_batch_upload = ft.ElevatedButton()
-    btn_batch_upload.text = "Upload Batch Scans"
-    btn_batch_upload.icon = "dynamic_feed"
-
-    btn_batch_export = ft.ElevatedButton()
-    btn_batch_export.text = "Download CSV Report"
-    btn_batch_export.icon = "download"
-    btn_batch_export.disabled = True
+    # Fixed Instantiations
+    btn_ev_key = ft.ElevatedButton(text="Upload Master Key", icon="key")
+    btn_ev_calib = ft.ElevatedButton(text="Upload Scan for Testing", icon="upload")
+    btn_batch_upload = ft.ElevatedButton(text="Upload Batch Scans", icon="dynamic_feed")
+    btn_batch_export = ft.ElevatedButton(text="Download CSV Report", icon="download", disabled=True)
 
     batch_prg = ft.ProgressBar(width=400, value=0, visible=False)
     batch_txt = ft.Text("")
@@ -875,6 +849,17 @@ def main(page: ft.Page):
         page.update()
     format_dropdown.on_change = on_format_change
 
+    # Defined variable before using it in the generator_content column
+    omr_settings = ft.Container(content=ft.Column(controls=[
+        ft.Text("2. OMR Specific Settings", size=18, weight="bold"),
+        exam_type,
+        course_code,
+        num_qs_dropdown,
+        ft.Row(controls=[btn_upload_watermark, lbl_watermark]),
+        ft.Row(controls=[btn_upload_csv, lbl_csv]),
+        ft.Text("CSV Format Note: File must contain headers 'USN' and 'Name'", italic=True, size=12)
+    ]), visible=True)
+
     # Pure Vertical Stacking prevents layout collision
     generator_content = ft.Column(controls=[
         ft.Text("📄 AMC Exam Sheet Generator", size=28, weight="bold"), 
@@ -886,15 +871,7 @@ def main(page: ft.Page):
         ft.Row(controls=[btn_upload_right, lbl_right]),
         ft.Container(height=10),
         
-        ft.Container(content=ft.Column(controls=[
-            ft.Text("2. OMR Specific Settings", size=18, weight="bold"),
-            exam_type,
-            course_code,
-            num_qs_dropdown,
-            ft.Row(controls=[btn_upload_watermark, lbl_watermark]),
-            ft.Row(controls=[btn_upload_csv, lbl_csv]),
-            ft.Text("CSV Format Note: File must contain headers 'USN' and 'Name'", italic=True, size=12)
-        ]), visible=True),
+        omr_settings, 
         
         ft.Divider(),
         gen_btn, 
@@ -942,14 +919,11 @@ def main(page: ft.Page):
             eval_batch.visible = True
         page.update()
 
-    btn_tab_calib = ft.ElevatedButton()
-    btn_tab_calib.text = "📐 Calibration Debugger"
-    btn_tab_calib.data = "calib"
+    # Fixed Tab Buttons
+    btn_tab_calib = ft.ElevatedButton(text="📐 Calibration Debugger", data="calib")
     btn_tab_calib.on_click = switch_eval_tab
 
-    btn_tab_batch = ft.ElevatedButton()
-    btn_tab_batch.text = "🚀 Batch Processing"
-    btn_tab_batch.data = "batch"
+    btn_tab_batch = ft.ElevatedButton(text="🚀 Batch Processing", data="batch")
     btn_tab_batch.on_click = switch_eval_tab
 
     evaluator_content = ft.Column(controls=[
