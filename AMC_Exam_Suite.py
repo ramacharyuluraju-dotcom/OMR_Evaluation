@@ -565,7 +565,6 @@ def main(page: ft.Page):
     
     gen_status_text = ft.Text("", weight="bold", size=16)
 
-    # NO KWARGS ALLOWED IN TEXT ARGUMENTS!
     gen_btn = ft.ElevatedButton("Generate PDF Document", icon="picture_as_pdf")
     btn_upload_left = ft.ElevatedButton("Upload Left Logo", icon="image")
     btn_upload_right = ft.ElevatedButton("Upload Right Logo", icon="image")
@@ -578,14 +577,14 @@ def main(page: ft.Page):
     ev_fill = ft.Slider(min=10, max=80, divisions=14, value=30)
     ev_key_lbl = ft.Text("No key uploaded. Using default pattern.", color="orange", italic=True)
 
-    # Empty instantiation, assign properties after to bypass __init__ versioning crash
-    img_orig = ft.Image()
+    # Empty instantiation WITH positional string to bypass constructor crashes
+    img_orig = ft.Image("")
     img_orig.width = 350
     img_orig.height = 350
     img_orig.fit = "contain"
     img_orig.visible = False
 
-    img_warp = ft.Image()
+    img_warp = ft.Image("")
     img_warp.width = 350
     img_warp.height = 350
     img_warp.fit = "contain"
@@ -593,7 +592,6 @@ def main(page: ft.Page):
 
     debug_txt = ft.Text("Upload a scan to begin.", size=14)
 
-    # NO KWARGS ALLOWED IN TEXT ARGUMENTS!
     btn_ev_key = ft.ElevatedButton("Upload Master Key", icon="key")
     btn_ev_calib = ft.ElevatedButton("Upload Scan for Testing", icon="upload")
     btn_batch_upload = ft.ElevatedButton("Upload Batch Scans", icon="dynamic_feed")
@@ -899,10 +897,9 @@ def main(page: ft.Page):
             ft.Column(controls=[ft.Text("Metrics", weight="bold"), debug_txt], width=200),
             ft.Column(controls=[ft.Text("Corner Lock", weight="bold"), img_orig]),
             ft.Column(controls=[ft.Text("Math Grid", weight="bold"), img_warp])
-        ])
+        ], vertical_alignment="start")
     ], spacing=15)
 
-    # REMOVED border kwargs from container to bypass flet border alias crash
     eval_batch = ft.Column(controls=[
         ft.Divider(),
         ft.Text("3. Batch Processing", size=18, weight="bold"),
@@ -950,6 +947,5 @@ def main(page: ft.Page):
         view_container
     ]))
 
-# NOTE: run() is the new standard instead of app()
 if __name__ == "__main__":
     ft.run(main)
