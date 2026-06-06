@@ -557,9 +557,9 @@ def main(page: ft.Page):
     ev_fill = ft.Slider(min=10, max=80, divisions=14, value=30, label="{value}%")
     ev_key_lbl = ft.Text("No key uploaded. Using default pattern.", color="orange", italic=True)
 
-    # STRING BASED IMAGE-FIT FIX: Changed ft.ImageFit.CONTAIN to "contain"
-    img_orig = ft.Image(src_base64="", width=350, height=350, fit="contain", visible=False)
-    img_warp = ft.Image(src_base64="", width=350, height=350, fit="contain", visible=False)
+    # STRING BASED IMAGE-FIT FIX and EMPTY SRC FIX
+    img_orig = ft.Image(src="", width=350, height=350, fit="contain", visible=False)
+    img_warp = ft.Image(src="", width=350, height=350, fit="contain", visible=False)
     debug_txt = ft.Text("Upload a scan to begin.", size=14)
 
     btn_batch_upload = ft.Button("Upload Batch Scans", icon="dynamic_feed")
@@ -844,7 +844,6 @@ def main(page: ft.Page):
         ft.Row([ft.Button("Upload Master Key", icon="key", on_click=pick_ev_key), ev_key_lbl])
     ], spacing=15)
 
-    # STRING BASED ALIGNMENT FIX: Changed ft.CrossAxisAlignment.START to "start"
     eval_debug = ft.Column([
         ft.Divider(),
         ft.Text("2. Single Scan Calibration", size=18, weight="bold"),
