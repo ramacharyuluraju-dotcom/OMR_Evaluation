@@ -487,31 +487,38 @@ def cv2_to_base64(img):
 
 
 # ==========================================
-# PART 3: NATIVE TKINTER DIALOGS (MAC/WIN SAFE)
+# PART 3: NATIVE TKINTER DIALOG WRAPPERS
 # ==========================================
-def _open_file_dialog(title, filetypes):
-    root = tk.Tk()
-    root.withdraw()
-    root.wm_attributes('-topmost', 1)
-    file_path = filedialog.askopenfilename(title=title, filetypes=filetypes)
-    root.destroy()
-    return file_path
+# Wrapping them in callbacks stops Tkinter from blocking Flet's UI Thread
+def _open_file_dialog(title, filetypes, callback):
+    def run_dialog():
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes('-topmost', 1)
+        file_path = filedialog.askopenfilename(title=title, filetypes=filetypes)
+        root.destroy()
+        callback(file_path)
+    threading.Thread(target=run_dialog, daemon=True).start()
 
-def _open_files_dialog(title, filetypes):
-    root = tk.Tk()
-    root.withdraw()
-    root.wm_attributes('-topmost', 1)
-    file_paths = filedialog.askopenfilenames(title=title, filetypes=filetypes)
-    root.destroy()
-    return list(file_paths) if file_paths else []
+def _open_files_dialog(title, filetypes, callback):
+    def run_dialog():
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes('-topmost', 1)
+        file_paths = filedialog.askopenfilenames(title=title, filetypes=filetypes)
+        root.destroy()
+        callback(list(file_paths) if file_paths else [])
+    threading.Thread(target=run_dialog, daemon=True).start()
 
-def _save_file_dialog(title, defaultextension, filetypes, initialfile):
-    root = tk.Tk()
-    root.withdraw()
-    root.wm_attributes('-topmost', 1)
-    file_path = filedialog.asksaveasfilename(title=title, defaultextension=defaultextension, filetypes=filetypes, initialfile=initialfile)
-    root.destroy()
-    return file_path
+def _save_file_dialog(title, defaultextension, filetypes, initialfile, callback):
+    def run_dialog():
+        root = tk.Tk()
+        root.withdraw()
+        root.wm_attributes('-topmost', 1)
+        file_path = filedialog.asksaveasfilename(title=title, defaultextension=defaultextension, filetypes=filetypes, initialfile=initialfile)
+        root.destroy()
+        callback(file_path)
+    threading.Thread(target=run_dialog, daemon=True).start()
 
 
 # ==========================================
@@ -549,7 +556,7 @@ def main(page: ft.Page):
     lbl_watermark = ft.Text("No watermark selected.", italic=True, size=12)
     lbl_csv = ft.Text("No CSV loaded.", italic=True, size=12, color="red700") 
     
-    gen_btn = ft.ElevatedButton("Generate PDF Document", icon="picture_as_pdf")
+    gen_btn = ft.ElevatedButton(text="Generate PDF Document", icon="picture_as_pdf")
     gen_status_text = ft.Text("", weight="bold", size=16)
 
     # --- EVALUATOR COMPONENTS ---
@@ -557,13 +564,12 @@ def main(page: ft.Page):
     ev_fill = ft.Slider(min=10, max=80, divisions=14, value=30, label="{value}%")
     ev_key_lbl = ft.Text("No key uploaded. Using default pattern.", color="orange", italic=True)
 
-    # STRING BASED IMAGE-FIT FIX and EMPTY SRC FIX
     img_orig = ft.Image(src="", width=350, height=350, fit="contain", visible=False)
     img_warp = ft.Image(src="", width=350, height=350, fit="contain", visible=False)
     debug_txt = ft.Text("Upload a scan to begin.", size=14)
 
-    btn_batch_upload = ft.Button("Upload Batch Scans", icon="dynamic_feed")
-    btn_batch_export = ft.Button("Download CSV Report", icon="download", disabled=True)
+    btn_batch_upload = ft.ElevatedButton(text="Upload Batch Scans", icon="dynamic_feed")
+    btn_batch_export = ft.ElevatedButton(text="Download CSV Report", icon="download", disabled=True)
     batch_prg = ft.ProgressBar(width=400, value=0, visible=False)
     batch_txt = ft.Text("")
     
@@ -575,37 +581,41 @@ def main(page: ft.Page):
     # ---------------------------------------------------------
     
     def pick_left(e):
-        path = _open_file_dialog("Select Left Logo", [("Images", "*.png *.jpg *.jpeg")])
-        if path:
-            gen_state["left_logo"] = path
-            lbl_left.value = f"Selected: {os.path.basename(path)}"
-            page.update()
+        def on_selected(path):
+            if path:
+                gen_state["left_logo"] = path
+                lbl_left.value = f"Selected: {os.path.basename(path)}"
+                page.update()
+        _open_file_dialog("Select Left Logo", [("Images", "*.png *.jpg *.jpeg")], on_selected)
 
     def pick_right(e):
-        path = _open_file_dialog("Select Right Logo", [("Images", "*.png *.jpg *.jpeg")])
-        if path:
-            gen_state["right_logo"] = path
-            lbl_right.value = f"Selected: {os.path.basename(path)}"
-            page.update()
+        def on_selected(path):
+            if path:
+                gen_state["right_logo"] = path
+                lbl_right.value = f"Selected: {os.path.basename(path)}"
+                page.update()
+        _open_file_dialog("Select Right Logo", [("Images", "*.png *.jpg *.jpeg")], on_selected)
 
     def pick_watermark(e):
-        path = _open_file_dialog("Select Watermark", [("Images", "*.png *.jpg *.jpeg")])
-        if path:
-            gen_state["watermark"] = path
-            lbl_watermark.value = f"Selected: {os.path.basename(path)}"
-            page.update()
+        def on_selected(path):
+            if path:
+                gen_state["watermark"] = path
+                lbl_watermark.value = f"Selected: {os.path.basename(path)}"
+                page.update()
+        _open_file_dialog("Select Watermark", [("Images", "*.png *.jpg *.jpeg")], on_selected)
 
     def pick_csv(e):
-        path = _open_file_dialog("Select Student CSV", [("CSV Files", "*.csv")])
-        if path:
-            try:
-                gen_state["students_df"] = pd.read_csv(path)
-                lbl_csv.value = f"Loaded {len(gen_state['students_df'])} students."
-                lbl_csv.color = "green700" 
-            except Exception as ex:
-                lbl_csv.value = f"Error reading CSV: {ex}"
-                lbl_csv.color = "red700" 
-            page.update()
+        def on_selected(path):
+            if path:
+                try:
+                    gen_state["students_df"] = pd.read_csv(path)
+                    lbl_csv.value = f"Loaded {len(gen_state['students_df'])} students."
+                    lbl_csv.color = "green700" 
+                except Exception as ex:
+                    lbl_csv.value = f"Error reading CSV: {ex}"
+                    lbl_csv.color = "red700" 
+                page.update()
+        _open_file_dialog("Select Student CSV", [("CSV Files", "*.csv")], on_selected)
 
     def trigger_generate_save(e):
         fmt = format_dropdown.value
@@ -614,189 +624,190 @@ def main(page: ft.Page):
         exam = exam_type.value
         qs = int(num_qs_dropdown.value)
 
-        # Sync Native Save Dialog
         default_name = "AMC_CAED.pdf"
         if fmt == "Relieving Superintendent Diary": default_name = "AMC_Relieving_Diary.pdf"
         elif fmt == "OMR Answer Sheet": default_name = f"AMC_OMR_{crs}_{qs}Q_Batch.pdf"
 
-        save_path = _save_file_dialog("Save PDF Document", ".pdf", [("PDF Files", "*.pdf")], default_name)
-        if not save_path: return
+        def on_save_path(save_path):
+            if not save_path: return
 
-        # Lock UI while Flet creates a background thread
-        gen_btn.disabled = True
-        gen_btn.text = "⏳ Generating PDF..."
-        gen_status_text.value = "Processing data and rendering document. Please wait..."
-        gen_status_text.color = "blue700"
-        page.update()
+            gen_btn.disabled = True
+            gen_btn.text = "⏳ Generating PDF..."
+            gen_status_text.value = "Processing data and rendering document. Please wait..."
+            gen_status_text.color = "blue700"
+            page.update()
 
-        def background_generate():
-            try:
-                if fmt == "CAED Printout Sheet":
-                    pdf_buf = generate_caed_pdf(col, gen_state["left_logo"], gen_state["right_logo"])
-                elif fmt == "Relieving Superintendent Diary":
-                    pdf_buf = generate_diary_pdf(col, gen_state["left_logo"], gen_state["right_logo"])
-                else: 
-                    if gen_state["students_df"] is None:
-                        gen_status_text.value = "❌ Cannot generate OMR: Please upload a Student CSV first."
-                        gen_status_text.color = "red700" 
-                        return
-                    pdf_buf = generate_batch_omr_pdf(col, gen_state["left_logo"], gen_state["right_logo"], gen_state["watermark"], gen_state["students_df"], crs, exam, qs)
-                
-                with open(save_path, "wb") as f:
-                    f.write(pdf_buf.getbuffer())
-                
-                gen_status_text.value = f"✅ Saved successfully to: {os.path.basename(save_path)}"
-                gen_status_text.color = "green700" 
-            except Exception as ex:
-                gen_status_text.value = f"❌ Generation Error: {ex}"
-                gen_status_text.color = "red700" 
-            finally:
-                # Restore button state
-                gen_btn.disabled = False
-                gen_btn.text = "Generate PDF Document"
-                page.update()
+            def background_generate():
+                try:
+                    if fmt == "CAED Printout Sheet":
+                        pdf_buf = generate_caed_pdf(col, gen_state["left_logo"], gen_state["right_logo"])
+                    elif fmt == "Relieving Superintendent Diary":
+                        pdf_buf = generate_diary_pdf(col, gen_state["left_logo"], gen_state["right_logo"])
+                    else: 
+                        if gen_state["students_df"] is None:
+                            gen_status_text.value = "❌ Cannot generate OMR: Please upload a Student CSV first."
+                            gen_status_text.color = "red700" 
+                            return
+                        pdf_buf = generate_batch_omr_pdf(col, gen_state["left_logo"], gen_state["right_logo"], gen_state["watermark"], gen_state["students_df"], crs, exam, qs)
+                    
+                    with open(save_path, "wb") as f:
+                        f.write(pdf_buf.getbuffer())
+                    
+                    gen_status_text.value = f"✅ Saved successfully to: {os.path.basename(save_path)}"
+                    gen_status_text.color = "green700" 
+                except Exception as ex:
+                    gen_status_text.value = f"❌ Generation Error: {ex}"
+                    gen_status_text.color = "red700" 
+                finally:
+                    gen_btn.disabled = False
+                    gen_btn.text = "Generate PDF Document"
+                    page.update()
 
-        threading.Thread(target=background_generate, daemon=True).start()
+            threading.Thread(target=background_generate, daemon=True).start()
+            
+        _save_file_dialog("Save PDF Document", ".pdf", [("PDF Files", "*.pdf")], default_name, on_save_path)
 
     gen_btn.on_click = trigger_generate_save
 
     # Evaluator Handlers
     def pick_ev_key(e):
-        path = _open_file_dialog("Select Master Key CSV", [("CSV Files", "*.csv")])
-        if path:
-            try:
-                df = pd.read_csv(path)
-                kd = {'A': {}, 'B': {}, 'C': {}, 'D': {}}
-                for _, row in df.iterrows():
-                    q = int(row["Question"])
-                    kd['A'][q] = str(row.get("Version_A", 'A')).strip().upper()
-                    kd['B'][q] = str(row.get("Version_B", 'B')).strip().upper()
-                    kd['C'][q] = str(row.get("Version_C", 'C')).strip().upper()
-                    kd['D'][q] = str(row.get("Version_D", 'D')).strip().upper()
-                eval_state["key_dict"] = kd
-                ev_key_lbl.value = f"✅ Key Loaded: {os.path.basename(path)}"
-                ev_key_lbl.color = "green"
-            except Exception as ex:
-                ev_key_lbl.value = f"Error: {ex}"
-                ev_key_lbl.color = "red"
-            page.update()
+        def on_selected(path):
+            if path:
+                try:
+                    df = pd.read_csv(path)
+                    kd = {'A': {}, 'B': {}, 'C': {}, 'D': {}}
+                    for _, row in df.iterrows():
+                        q = int(row["Question"])
+                        kd['A'][q] = str(row.get("Version_A", 'A')).strip().upper()
+                        kd['B'][q] = str(row.get("Version_B", 'B')).strip().upper()
+                        kd['C'][q] = str(row.get("Version_C", 'C')).strip().upper()
+                        kd['D'][q] = str(row.get("Version_D", 'D')).strip().upper()
+                    eval_state["key_dict"] = kd
+                    ev_key_lbl.value = f"✅ Key Loaded: {os.path.basename(path)}"
+                    ev_key_lbl.color = "green"
+                except Exception as ex:
+                    ev_key_lbl.value = f"Error: {ex}"
+                    ev_key_lbl.color = "red"
+                page.update()
+        _open_file_dialog("Select Master Key CSV", [("CSV Files", "*.csv")], on_selected)
 
     def pick_ev_calib(e):
-        path = _open_file_dialog("Select Scan for Testing", [("Images/PDFs", "*.jpg *.jpeg *.png *.pdf")])
-        if not path: return
+        def on_path_selected(path):
+            if not path: return
 
-        debug_txt.value = "⏳ Analyzing Scan... please wait."
-        img_orig.visible = False
-        img_warp.visible = False
-        page.update()
-
-        def background_calib():
-            cfg = CONFIG_50Q if ev_qs.value == "50" else CONFIG_100Q
-            try:
-                if path.lower().endswith('.pdf'):
-                    doc = fitz.open(path)
-                    pix = doc.load_page(0).get_pixmap(dpi=200)
-                    img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
-                    if pix.n == 4: img_array = cv2.cvtColor(img_array, cv2.COLOR_RGBA2BGR)
-                    elif pix.n == 3: img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
-                    elif pix.n == 1: img_array = cv2.cvtColor(img_array, cv2.COLOR_GRAY2BGR)
-                    doc.close()
-                else:
-                    img_array = cv2.imread(path)
-                
-                if img_array is None:
-                    debug_txt.value = "❌ Error: Could not read image/PDF file."
-                    page.update(); return
-
-                res, d_orig, d_warp = evaluate_image(img_array, eval_state["key_dict"], ev_fill.value/100.0, cfg)
-                debug_txt.value = f"✅ Analysis Complete\n\nUSN: {res['USN']}\nScore: {res['Score']}\nConfidence: {res['Confidence']}\nFlagged: {res['Flagged Questions']}"
-                
-                if d_orig is not None: 
-                    img_orig.src_base64 = cv2_to_base64(d_orig)
-                    img_orig.visible = True
-                if d_warp is not None: 
-                    img_warp.src_base64 = cv2_to_base64(d_warp)
-                    img_warp.visible = True
-            except Exception as ex:
-                debug_txt.value = f"❌ Analysis Error: {ex}"
-            
+            debug_txt.value = "⏳ Analyzing Scan... please wait."
+            img_orig.visible = False
+            img_warp.visible = False
             page.update()
 
-        threading.Thread(target=background_calib, daemon=True).start()
-
-    def pick_ev_batch(e):
-        paths = _open_files_dialog("Select Batch Scans", [("Images/PDFs", "*.jpg *.jpeg *.png *.pdf")])
-        if not paths: return
-
-        btn_batch_upload.disabled = True
-        btn_batch_export.disabled = True
-        batch_prg.visible = True
-        batch_prg.value = 0
-        eval_state["results"] = []
-        dt.rows.clear()
-        page.update()
-
-        def background_batch():
-            total_items = len(paths)
-            cfg = CONFIG_50Q if ev_qs.value == "50" else CONFIG_100Q
-            
-            for idx, path in enumerate(paths):
-                filename = os.path.basename(path)
-                batch_txt.value = f"Processing {idx+1}/{total_items}: {filename}"
-                batch_prg.value = (idx+1)/total_items
-                page.update()
-                
+            def background_calib():
+                cfg = CONFIG_50Q if ev_qs.value == "50" else CONFIG_100Q
                 try:
                     if path.lower().endswith('.pdf'):
                         doc = fitz.open(path)
-                        for p_num in range(len(doc)):
-                            pix = doc.load_page(p_num).get_pixmap(dpi=200)
-                            img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
-                            if pix.n == 4: img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
-                            elif pix.n == 3: img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                            elif pix.n == 1: img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-                            res, _, _ = evaluate_image(img, eval_state["key_dict"], ev_fill.value/100.0, cfg)
-                            res["File Name"] = f"{filename} (Pg {p_num+1})"
-                            eval_state["results"].append(res)
+                        pix = doc.load_page(0).get_pixmap(dpi=200)
+                        img_array = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
+                        if pix.n == 4: img_array = cv2.cvtColor(img_array, cv2.COLOR_RGBA2BGR)
+                        elif pix.n == 3: img_array = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+                        elif pix.n == 1: img_array = cv2.cvtColor(img_array, cv2.COLOR_GRAY2BGR)
                         doc.close()
                     else:
-                        img = cv2.imread(path)
-                        if img is not None:
-                            res, _, _ = evaluate_image(img, eval_state["key_dict"], ev_fill.value/100.0, cfg)
-                            res["File Name"] = filename
-                            eval_state["results"].append(res)
-                        else:
-                            eval_state["results"].append({"USN": "Error", "Score": 0, "Confidence": "0%", "Flagged Questions": "Unreadable File", "File Name": filename})
+                        img_array = cv2.imread(path)
+                    
+                    if img_array is None:
+                        debug_txt.value = "❌ Error: Could not read image/PDF file."
+                        page.update(); return
+
+                    res, d_orig, d_warp = evaluate_image(img_array, eval_state["key_dict"], ev_fill.value/100.0, cfg)
+                    debug_txt.value = f"✅ Analysis Complete\n\nUSN: {res['USN']}\nScore: {res['Score']}\nConfidence: {res['Confidence']}\nFlagged: {res['Flagged Questions']}"
+                    
+                    if d_orig is not None: 
+                        img_orig.src_base64 = cv2_to_base64(d_orig)
+                        img_orig.visible = True
+                    if d_warp is not None: 
+                        img_warp.src_base64 = cv2_to_base64(d_warp)
+                        img_warp.visible = True
                 except Exception as ex:
-                    eval_state["results"].append({"USN": "Error", "Score": 0, "Confidence": "0%", "Flagged Questions": f"Crash: {ex}", "File Name": filename})
-            
-            # Repopulate DataTable
-            for r in eval_state["results"]:
-                dt.rows.append(ft.DataRow(cells=[
-                    ft.DataCell(ft.Text(str(r.get("USN", "Error")))), 
-                    ft.DataCell(ft.Text(str(r.get("Score", 0)))), 
-                    ft.DataCell(ft.Text(str(r.get("Confidence", "0%")))), 
-                    ft.DataCell(ft.Text(str(r.get("Flagged Questions", "")))), 
-                    ft.DataCell(ft.Text(str(r.get("File Name", ""))))
-                ]))
-            
-            # Unlock UI
-            batch_prg.visible = False
-            batch_txt.value = f"✅ Batch Complete! Processed {total_items} files."
-            btn_batch_upload.disabled = False
-            btn_batch_export.disabled = False
+                    debug_txt.value = f"❌ Analysis Error: {ex}"
+                
+                page.update()
+
+            threading.Thread(target=background_calib, daemon=True).start()
+        _open_file_dialog("Select Scan for Testing", [("Images/PDFs", "*.jpg *.jpeg *.png *.pdf")], on_path_selected)
+
+    def pick_ev_batch(e):
+        def on_paths_selected(paths):
+            if not paths: return
+
+            btn_batch_upload.disabled = True
+            btn_batch_export.disabled = True
+            batch_prg.visible = True
+            batch_prg.value = 0
+            eval_state["results"] = []
+            dt.rows.clear()
             page.update()
 
-        threading.Thread(target=background_batch, daemon=True).start()
+            def background_batch():
+                total_items = len(paths)
+                cfg = CONFIG_50Q if ev_qs.value == "50" else CONFIG_100Q
+                
+                for idx, path in enumerate(paths):
+                    filename = os.path.basename(path)
+                    batch_txt.value = f"Processing {idx+1}/{total_items}: {filename}"
+                    batch_prg.value = (idx+1)/total_items
+                    page.update()
+                    
+                    try:
+                        if path.lower().endswith('.pdf'):
+                            doc = fitz.open(path)
+                            for p_num in range(len(doc)):
+                                pix = doc.load_page(p_num).get_pixmap(dpi=200)
+                                img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
+                                if pix.n == 4: img = cv2.cvtColor(img, cv2.COLOR_RGBA2BGR)
+                                elif pix.n == 3: img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                                elif pix.n == 1: img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
+                                res, _, _ = evaluate_image(img, eval_state["key_dict"], ev_fill.value/100.0, cfg)
+                                res["File Name"] = f"{filename} (Pg {p_num+1})"
+                                eval_state["results"].append(res)
+                            doc.close()
+                        else:
+                            img = cv2.imread(path)
+                            if img is not None:
+                                res, _, _ = evaluate_image(img, eval_state["key_dict"], ev_fill.value/100.0, cfg)
+                                res["File Name"] = filename
+                                eval_state["results"].append(res)
+                            else:
+                                eval_state["results"].append({"USN": "Error", "Score": 0, "Confidence": "0%", "Flagged Questions": "Unreadable File", "File Name": filename})
+                    except Exception as ex:
+                        eval_state["results"].append({"USN": "Error", "Score": 0, "Confidence": "0%", "Flagged Questions": f"Crash: {ex}", "File Name": filename})
+                
+                for r in eval_state["results"]:
+                    dt.rows.append(ft.DataRow(cells=[
+                        ft.DataCell(ft.Text(str(r.get("USN", "Error")))), 
+                        ft.DataCell(ft.Text(str(r.get("Score", 0)))), 
+                        ft.DataCell(ft.Text(str(r.get("Confidence", "0%")))), 
+                        ft.DataCell(ft.Text(str(r.get("Flagged Questions", "")))), 
+                        ft.DataCell(ft.Text(str(r.get("File Name", ""))))
+                    ]))
+                
+                batch_prg.visible = False
+                batch_txt.value = f"✅ Batch Complete! Processed {total_items} files."
+                btn_batch_upload.disabled = False
+                btn_batch_export.disabled = False
+                page.update()
+
+            threading.Thread(target=background_batch, daemon=True).start()
+        _open_files_dialog("Select Batch Scans", [("Images/PDFs", "*.jpg *.jpeg *.png *.pdf")], on_paths_selected)
 
     btn_batch_upload.on_click = pick_ev_batch
 
     def save_ev_export(e):
-        path = _save_file_dialog("Save CSV Report", ".csv", [("CSV Files", "*.csv")], "AMC_Evaluation_Report.csv")
-        if path and eval_state["results"]:
-            pd.DataFrame(eval_state["results"])[["USN", "Course", "Version", "Score", "Confidence", "Needs Moderation", "Flagged Questions", "Status", "File Name"]].to_csv(path, index=False)
-            batch_txt.value = f"✅ Exported to {path}"
-            page.update()
+        def on_save_path(path):
+            if path and eval_state["results"]:
+                pd.DataFrame(eval_state["results"])[["USN", "Course", "Version", "Score", "Confidence", "Needs Moderation", "Flagged Questions", "Status", "File Name"]].to_csv(path, index=False)
+                batch_txt.value = f"✅ Exported to {path}"
+                page.update()
+        _save_file_dialog("Save CSV Report", ".csv", [("CSV Files", "*.csv")], "AMC_Evaluation_Report.csv", on_save_path)
 
     btn_batch_export.on_click = save_ev_export
 
@@ -813,8 +824,8 @@ def main(page: ft.Page):
         ft.Text("1. General Settings", size=18, weight="bold"),
         format_dropdown,
         college_name,
-        ft.Row([ft.Button("Upload Left Logo", icon="image", on_click=pick_left), lbl_left]),
-        ft.Row([ft.Button("Upload Right Logo", icon="image", on_click=pick_right), lbl_right]),
+        ft.Row([ft.ElevatedButton(text="Upload Left Logo", icon="image", on_click=pick_left), lbl_left]),
+        ft.Row([ft.ElevatedButton(text="Upload Right Logo", icon="image", on_click=pick_right), lbl_right]),
     ], spacing=15)
 
     omr_settings = ft.Column([
@@ -823,8 +834,8 @@ def main(page: ft.Page):
         exam_type,
         course_code,
         num_qs_dropdown,
-        ft.Row([ft.Button("Upload Watermark", icon="water_drop", on_click=pick_watermark), lbl_watermark]),
-        ft.Row([ft.Button("Upload Student CSV", icon="table_view", on_click=pick_csv), lbl_csv]),
+        ft.Row([ft.ElevatedButton(text="Upload Watermark", icon="water_drop", on_click=pick_watermark), lbl_watermark]),
+        ft.Row([ft.ElevatedButton(text="Upload Student CSV", icon="table_view", on_click=pick_csv), lbl_csv]),
         ft.Text("CSV Format Note: File must contain headers 'USN' and 'Name'", italic=True, size=12)
     ], spacing=15)
 
@@ -841,13 +852,13 @@ def main(page: ft.Page):
     eval_general = ft.Column([
         ft.Text("1. Evaluation Settings", size=18, weight="bold"),
         ft.Row([ev_qs, ft.Text("Ink Threshold (Confidence):"), ev_fill]),
-        ft.Row([ft.Button("Upload Master Key", icon="key", on_click=pick_ev_key), ev_key_lbl])
+        ft.Row([ft.ElevatedButton(text="Upload Master Key", icon="key", on_click=pick_ev_key), ev_key_lbl])
     ], spacing=15)
 
     eval_debug = ft.Column([
         ft.Divider(),
         ft.Text("2. Single Scan Calibration", size=18, weight="bold"),
-        ft.Row([ft.Button("Upload Scan for Testing", icon="upload", on_click=pick_ev_calib)]),
+        ft.Row([ft.ElevatedButton(text="Upload Scan for Testing", icon="upload", on_click=pick_ev_calib)]),
         ft.Row([
             ft.Column([ft.Text("Metrics", weight="bold"), debug_txt], width=200),
             ft.Column([ft.Text("Corner Lock", weight="bold"), img_orig]),
@@ -863,20 +874,13 @@ def main(page: ft.Page):
         ft.Container(content=ft.Column([dt], scroll="auto"), height=400, border=ft.Border.all(1, "grey"))
     ], spacing=15, visible=False)
 
-    evaluator_content = ft.Column([
-        ft.Text("🎯 OMR Evaluator", size=28, weight="bold"), ft.Divider(),
-        eval_general, 
-        eval_debug, 
-        eval_batch
-    ])
-
     view_container = ft.Container(content=generator_content)
 
     def switch_eval_tab(e):
-        if e.control.text == "📐 Calibration Debugger":
+        if e.control.data == "calib":
             eval_debug.visible = True
             eval_batch.visible = False
-        else:
+        elif e.control.data == "batch":
             eval_debug.visible = False
             eval_batch.visible = True
         page.update()
@@ -885,8 +889,8 @@ def main(page: ft.Page):
         ft.Text("🎯 OMR Evaluator", size=28, weight="bold"), ft.Divider(),
         eval_general, ft.Divider(),
         ft.Row([
-            ft.Button("📐 Calibration Debugger", on_click=switch_eval_tab),
-            ft.Button("🚀 Batch Processing", on_click=switch_eval_tab)
+            ft.ElevatedButton(text="📐 Calibration Debugger", data="calib", on_click=switch_eval_tab),
+            ft.ElevatedButton(text="🚀 Batch Processing", data="batch", on_click=switch_eval_tab)
         ]),
         eval_debug, eval_batch
     ])
@@ -896,8 +900,8 @@ def main(page: ft.Page):
 
     page.add(ft.Column([
         ft.Row([
-            ft.Button("📄 Generator", on_click=switch_to_gen, width=200, height=50),
-            ft.Button("🎯 Evaluator", on_click=switch_to_eval, width=200, height=50),
+            ft.ElevatedButton(text="📄 Generator", on_click=switch_to_gen, width=200, height=50),
+            ft.ElevatedButton(text="🎯 Evaluator", on_click=switch_to_eval, width=200, height=50),
         ], alignment="center"),
         ft.Divider(),
         view_container
