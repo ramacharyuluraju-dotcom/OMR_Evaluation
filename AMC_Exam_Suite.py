@@ -533,7 +533,7 @@ def _save_file_dialog(title, defaultextension, filetypes, initialfile, callback)
 # ==========================================
 def main(page: ft.Page):
     page.title = "AMC Exam Suite"
-    page.theme_mode = "light" 
+    page.theme_mode = ft.ThemeMode.LIGHT 
 
     # --- STATE MANAGEMENT ---
     gen_state = {"left_logo": None, "right_logo": None, "watermark": None, "students_df": None}
@@ -559,40 +559,31 @@ def main(page: ft.Page):
     lbl_left = ft.Text("No left logo selected.", italic=True, size=12)
     lbl_right = ft.Text("No right logo selected.", italic=True, size=12)
     lbl_watermark = ft.Text("No watermark selected.", italic=True, size=12)
-    lbl_csv = ft.Text("No CSV loaded.", italic=True, size=12, color="red700") 
+    lbl_csv = ft.Text("No CSV loaded.", italic=True, size=12, color=ft.colors.RED_700) 
     gen_status_text = ft.Text("", weight="bold", size=16)
 
-    # --- SOLUTION 1: FIXED BUTTONS (NO KEYWORD ARGUMENT FOR TEXT) ---
-    gen_btn = ft.ElevatedButton("Generate PDF Document", icon="picture_as_pdf")
-    btn_upload_left = ft.ElevatedButton("Upload Left Logo", icon="image")
-    btn_upload_right = ft.ElevatedButton("Upload Right Logo", icon="image")
-    btn_upload_watermark = ft.ElevatedButton("Upload Watermark", icon="water_drop")
-    btn_upload_csv = ft.ElevatedButton("Upload Student CSV", icon="table_view")
+    # FIXED BUTTON INITIALIZATION (No unexpected text keywords, strict constants)
+    gen_btn = ft.ElevatedButton("Generate PDF Document", icon=ft.icons.PICTURE_AS_PDF)
+    btn_upload_left = ft.ElevatedButton("Upload Left Logo", icon=ft.icons.IMAGE)
+    btn_upload_right = ft.ElevatedButton("Upload Right Logo", icon=ft.icons.IMAGE)
+    btn_upload_watermark = ft.ElevatedButton("Upload Watermark", icon=ft.icons.WATER_DROP)
+    btn_upload_csv = ft.ElevatedButton("Upload Student CSV", icon=ft.icons.TABLE_VIEW)
 
     # --- EVALUATOR COMPONENTS ---
     ev_qs = ft.Dropdown(options=[ft.dropdown.Option("50"), ft.dropdown.Option("100")], value="100", width=200)
     ev_fill = ft.Slider(min=10, max=80, divisions=14, value=30)
-    ev_key_lbl = ft.Text("No key uploaded. Using default pattern.", color="orange", italic=True)
+    ev_key_lbl = ft.Text("No key uploaded. Using default pattern.", color=ft.colors.ORANGE, italic=True)
 
-    img_orig = ft.Image("")
-    img_orig.width = 350
-    img_orig.height = 350
-    img_orig.fit = "contain"
-    img_orig.visible = False
-
-    img_warp = ft.Image("")
-    img_warp.width = 350
-    img_warp.height = 350
-    img_warp.fit = "contain"
-    img_warp.visible = False
+    # FIX: Initialized cleanly without passing empty strings to source
+    img_orig = ft.Image(width=350, height=350, fit=ft.ImageFit.CONTAIN, visible=False)
+    img_warp = ft.Image(width=350, height=350, fit=ft.ImageFit.CONTAIN, visible=False)
 
     debug_txt = ft.Text("Upload a scan to begin.", size=14)
 
-    # --- SOLUTION 1: FIXED BUTTONS (NO KEYWORD ARGUMENT FOR TEXT) ---
-    btn_ev_key = ft.ElevatedButton("Upload Master Key", icon="key")
-    btn_ev_calib = ft.ElevatedButton("Upload Scan for Testing", icon="upload")
-    btn_batch_upload = ft.ElevatedButton("Upload Batch Scans", icon="dynamic_feed")
-    btn_batch_export = ft.ElevatedButton("Download CSV Report", icon="download", disabled=True)
+    btn_ev_key = ft.ElevatedButton("Upload Master Key", icon=ft.icons.KEY)
+    btn_ev_calib = ft.ElevatedButton("Upload Scan for Testing", icon=ft.icons.UPLOAD)
+    btn_batch_upload = ft.ElevatedButton("Upload Batch Scans", icon=ft.icons.DYNAMIC_FEED)
+    btn_batch_export = ft.ElevatedButton("Download CSV Report", icon=ft.icons.DOWNLOAD, disabled=True)
 
     batch_prg = ft.ProgressBar(width=400, value=0, visible=False)
     batch_txt = ft.Text("")
@@ -603,7 +594,6 @@ def main(page: ft.Page):
     # ---------------------------------------------------------
     # UI HANDLER FUNCTIONS
     # ---------------------------------------------------------
-    
     def pick_left(e):
         def on_selected(path):
             if path:
@@ -637,10 +627,10 @@ def main(page: ft.Page):
                 try:
                     gen_state["students_df"] = pd.read_csv(path)
                     lbl_csv.value = f"Loaded {len(gen_state['students_df'])} students."
-                    lbl_csv.color = "green700" 
+                    lbl_csv.color = ft.colors.GREEN_700
                 except Exception as ex:
                     lbl_csv.value = f"Error reading CSV: {ex}"
-                    lbl_csv.color = "red700" 
+                    lbl_csv.color = ft.colors.RED_700
                 page.update()
         _open_file_dialog("Select Student CSV", [("CSV Files", "*.csv")], on_selected)
     btn_upload_csv.on_click = pick_csv
@@ -660,11 +650,9 @@ def main(page: ft.Page):
             if not save_path: return
 
             gen_btn.disabled = True
-            # In Flet 0.85, the internal label attribute is typically accessed via 'content' or directly modified depending on how it was constructed
-            # However, direct assignment to .text handles standard positional text mutations safely
             gen_btn.text = "⏳ Generating PDF..."
             gen_status_text.value = "Processing data and rendering document. Please wait..."
-            gen_status_text.color = "blue700"
+            gen_status_text.color = ft.colors.BLUE_700
             page.update()
 
             def background_generate():
@@ -676,7 +664,7 @@ def main(page: ft.Page):
                     else: 
                         if gen_state["students_df"] is None:
                             gen_status_text.value = "❌ Cannot generate OMR: Please upload a Student CSV first."
-                            gen_status_text.color = "red700" 
+                            gen_status_text.color = ft.colors.RED_700
                             return
                         pdf_buf = generate_batch_omr_pdf(col, gen_state["left_logo"], gen_state["right_logo"], gen_state["watermark"], gen_state["students_df"], crs, exam, qs)
                     
@@ -684,10 +672,10 @@ def main(page: ft.Page):
                         f.write(pdf_buf.getbuffer())
                     
                     gen_status_text.value = f"✅ Saved successfully to: {os.path.basename(save_path)}"
-                    gen_status_text.color = "green700" 
+                    gen_status_text.color = ft.colors.GREEN_700
                 except Exception as ex:
                     gen_status_text.value = f"❌ Generation Error: {ex}"
-                    gen_status_text.color = "red700" 
+                    gen_status_text.color = ft.colors.RED_700
                 finally:
                     gen_btn.disabled = False
                     gen_btn.text = "Generate PDF Document"
@@ -713,10 +701,10 @@ def main(page: ft.Page):
                         kd['D'][q] = str(row.get("Version_D", 'D')).strip().upper()
                     eval_state["key_dict"] = kd
                     ev_key_lbl.value = f"✅ Key Loaded: {os.path.basename(path)}"
-                    ev_key_lbl.color = "green"
+                    ev_key_lbl.color = ft.colors.GREEN
                 except Exception as ex:
                     ev_key_lbl.value = f"Error: {ex}"
-                    ev_key_lbl.color = "red"
+                    ev_key_lbl.color = ft.colors.RED
                 page.update()
         _open_file_dialog("Select Master Key CSV", [("CSV Files", "*.csv")], on_selected)
     btn_ev_key.on_click = pick_ev_key
@@ -752,11 +740,11 @@ def main(page: ft.Page):
                     debug_txt.value = f"✅ Analysis Complete\n\nUSN: {res['USN']}\nScore: {res['Score']}\nConfidence: {res['Confidence']}\nFlagged: {res['Flagged Questions']}"
                     
                     if d_orig is not None: 
-                        img_orig.src = ""
+                        img_orig.src = None
                         img_orig.src_base64 = cv2_to_base64(d_orig)
                         img_orig.visible = True
                     if d_warp is not None: 
-                        img_warp.src = ""
+                        img_warp.src = None
                         img_warp.src_base64 = cv2_to_base64(d_warp)
                         img_warp.visible = True
                 except Exception as ex:
@@ -844,7 +832,7 @@ def main(page: ft.Page):
 
 
     # ---------------------------------------------------------
-    # LAYOUT CONSTRUCTION (MATCHING THE LIBRARY APP SIDEBAR)
+    # LAYOUT CONSTRUCTION
     # ---------------------------------------------------------
     def on_format_change(e):
         omr_settings.visible = (format_dropdown.value == "OMR Answer Sheet")
@@ -876,7 +864,7 @@ def main(page: ft.Page):
         ft.Divider(),
         gen_btn, 
         gen_status_text
-    ], scroll="auto", expand=True)
+    ], scroll=ft.ScrollMode.AUTO, expand=True)
 
     generator_view = ft.Container(content=generator_content, visible=True, expand=True, padding=20)
 
@@ -898,7 +886,7 @@ def main(page: ft.Page):
             ft.Column(controls=[ft.Text("Metrics", weight="bold"), debug_txt], width=200),
             ft.Column(controls=[ft.Text("Corner Lock", weight="bold"), img_orig]),
             ft.Column(controls=[ft.Text("Math Grid", weight="bold"), img_warp])
-        ], vertical_alignment="start", wrap=True)
+        ], vertical_alignment=ft.CrossAxisAlignment.START, wrap=True)
     ], spacing=15)
 
     eval_batch = ft.Column(controls=[
@@ -906,7 +894,7 @@ def main(page: ft.Page):
         ft.Text("3. Batch Processing", size=18, weight="bold"),
         ft.Row(controls=[btn_batch_upload, btn_batch_export]),
         batch_prg, batch_txt, 
-        ft.Container(content=ft.Column(controls=[dt], scroll="auto"), height=400)
+        ft.Container(content=ft.Column(controls=[dt], scroll=ft.ScrollMode.AUTO), height=400)
     ], spacing=15, visible=False)
 
     def switch_eval_tab(e):
@@ -918,7 +906,6 @@ def main(page: ft.Page):
             eval_batch.visible = True
         page.update()
 
-    # --- SOLUTION 1: FIXED TAB BUTTONS (NO KEYWORD ARGUMENT FOR TEXT) ---
     btn_tab_calib = ft.ElevatedButton("📐 Calibration Debugger", data="calib")
     btn_tab_calib.on_click = switch_eval_tab
 
@@ -930,7 +917,7 @@ def main(page: ft.Page):
         eval_general, ft.Divider(),
         ft.Row(controls=[btn_tab_calib, btn_tab_batch]),
         eval_debug, eval_batch
-    ], scroll="auto", expand=True)
+    ], scroll=ft.ScrollMode.AUTO, expand=True)
 
     evaluator_view = ft.Container(content=evaluator_content, visible=False, expand=True, padding=20)
 
@@ -943,13 +930,13 @@ def main(page: ft.Page):
 
     sidebar = ft.NavigationRail(
         selected_index=0,
-        label_type="all",
+        label_type=ft.NavigationRailLabelType.ALL,
         min_width=100,
         min_extended_width=200,
         group_alignment=-0.9,
         destinations=[
-            ft.NavigationRailDestination(icon="picture_as_pdf", label="Generator"),
-            ft.NavigationRailDestination(icon="document_scanner", label="Evaluator"),
+            ft.NavigationRailDestination(icon=ft.icons.PICTURE_AS_PDF, label="Generator"),
+            ft.NavigationRailDestination(icon=ft.icons.DOCUMENT_SCANNER, label="Evaluator"),
         ],
         on_change=switch_page,
     )
@@ -960,7 +947,7 @@ def main(page: ft.Page):
             ft.VerticalDivider(width=1),
             ft.Column(
                 controls=[generator_view, evaluator_view], 
-                alignment="start", 
+                alignment=ft.MainAxisAlignment.START, 
                 expand=True
             )
         ],
@@ -970,4 +957,4 @@ def main(page: ft.Page):
     page.add(main_layout)
 
 if __name__ == "__main__":
-    ft.run(main)
+    ft.app(target=main)
