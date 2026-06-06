@@ -562,12 +562,12 @@ def main(page: ft.Page):
     lbl_csv = ft.Text("No CSV loaded.", italic=True, size=12, color="red700") 
     gen_status_text = ft.Text("", weight="bold", size=16)
 
-    # Fixed Instantiations
-    gen_btn = ft.ElevatedButton(text="Generate PDF Document", icon="picture_as_pdf")
-    btn_upload_left = ft.ElevatedButton(text="Upload Left Logo", icon="image")
-    btn_upload_right = ft.ElevatedButton(text="Upload Right Logo", icon="image")
-    btn_upload_watermark = ft.ElevatedButton(text="Upload Watermark", icon="water_drop")
-    btn_upload_csv = ft.ElevatedButton(text="Upload Student CSV", icon="table_view")
+    # --- SOLUTION 1: FIXED BUTTONS (NO KEYWORD ARGUMENT FOR TEXT) ---
+    gen_btn = ft.ElevatedButton("Generate PDF Document", icon="picture_as_pdf")
+    btn_upload_left = ft.ElevatedButton("Upload Left Logo", icon="image")
+    btn_upload_right = ft.ElevatedButton("Upload Right Logo", icon="image")
+    btn_upload_watermark = ft.ElevatedButton("Upload Watermark", icon="water_drop")
+    btn_upload_csv = ft.ElevatedButton("Upload Student CSV", icon="table_view")
 
     # --- EVALUATOR COMPONENTS ---
     ev_qs = ft.Dropdown(options=[ft.dropdown.Option("50"), ft.dropdown.Option("100")], value="100", width=200)
@@ -588,11 +588,11 @@ def main(page: ft.Page):
 
     debug_txt = ft.Text("Upload a scan to begin.", size=14)
 
-    # Fixed Instantiations
-    btn_ev_key = ft.ElevatedButton(text="Upload Master Key", icon="key")
-    btn_ev_calib = ft.ElevatedButton(text="Upload Scan for Testing", icon="upload")
-    btn_batch_upload = ft.ElevatedButton(text="Upload Batch Scans", icon="dynamic_feed")
-    btn_batch_export = ft.ElevatedButton(text="Download CSV Report", icon="download", disabled=True)
+    # --- SOLUTION 1: FIXED BUTTONS (NO KEYWORD ARGUMENT FOR TEXT) ---
+    btn_ev_key = ft.ElevatedButton("Upload Master Key", icon="key")
+    btn_ev_calib = ft.ElevatedButton("Upload Scan for Testing", icon="upload")
+    btn_batch_upload = ft.ElevatedButton("Upload Batch Scans", icon="dynamic_feed")
+    btn_batch_export = ft.ElevatedButton("Download CSV Report", icon="download", disabled=True)
 
     batch_prg = ft.ProgressBar(width=400, value=0, visible=False)
     batch_txt = ft.Text("")
@@ -660,6 +660,8 @@ def main(page: ft.Page):
             if not save_path: return
 
             gen_btn.disabled = True
+            # In Flet 0.85, the internal label attribute is typically accessed via 'content' or directly modified depending on how it was constructed
+            # However, direct assignment to .text handles standard positional text mutations safely
             gen_btn.text = "⏳ Generating PDF..."
             gen_status_text.value = "Processing data and rendering document. Please wait..."
             gen_status_text.color = "blue700"
@@ -849,7 +851,6 @@ def main(page: ft.Page):
         page.update()
     format_dropdown.on_change = on_format_change
 
-    # Defined variable before using it in the generator_content column
     omr_settings = ft.Container(content=ft.Column(controls=[
         ft.Text("2. OMR Specific Settings", size=18, weight="bold"),
         exam_type,
@@ -860,7 +861,6 @@ def main(page: ft.Page):
         ft.Text("CSV Format Note: File must contain headers 'USN' and 'Name'", italic=True, size=12)
     ]), visible=True)
 
-    # Pure Vertical Stacking prevents layout collision
     generator_content = ft.Column(controls=[
         ft.Text("📄 AMC Exam Sheet Generator", size=28, weight="bold"), 
         ft.Divider(),
@@ -894,7 +894,6 @@ def main(page: ft.Page):
         ft.Divider(),
         ft.Text("2. Single Scan Calibration", size=18, weight="bold"),
         ft.Row(controls=[btn_ev_calib]),
-        # wrap=True ensures images shift down on small screens instead of overlapping
         ft.Row(controls=[
             ft.Column(controls=[ft.Text("Metrics", weight="bold"), debug_txt], width=200),
             ft.Column(controls=[ft.Text("Corner Lock", weight="bold"), img_orig]),
@@ -919,11 +918,11 @@ def main(page: ft.Page):
             eval_batch.visible = True
         page.update()
 
-    # Fixed Tab Buttons
-    btn_tab_calib = ft.ElevatedButton(text="📐 Calibration Debugger", data="calib")
+    # --- SOLUTION 1: FIXED TAB BUTTONS (NO KEYWORD ARGUMENT FOR TEXT) ---
+    btn_tab_calib = ft.ElevatedButton("📐 Calibration Debugger", data="calib")
     btn_tab_calib.on_click = switch_eval_tab
 
-    btn_tab_batch = ft.ElevatedButton(text="🚀 Batch Processing", data="batch")
+    btn_tab_batch = ft.ElevatedButton("🚀 Batch Processing", data="batch")
     btn_tab_batch.on_click = switch_eval_tab
 
     evaluator_content = ft.Column(controls=[
@@ -935,7 +934,7 @@ def main(page: ft.Page):
 
     evaluator_view = ft.Container(content=evaluator_content, visible=False, expand=True, padding=20)
 
-    # --- SIDEBAR NAVIGATION (Mimicking main.py Library App) ---
+    # --- SIDEBAR NAVIGATION ---
     def switch_page(e):
         idx = e.control.selected_index
         generator_view.visible = (idx == 0)
