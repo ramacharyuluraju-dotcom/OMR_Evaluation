@@ -534,8 +534,6 @@ def _save_file_dialog(title, defaultextension, filetypes, initialfile, callback)
 def main(page: ft.Page):
     page.title = "AMC Exam Suite"
     page.theme_mode = "light" 
-    page.padding = 20
-    page.scroll = "auto" 
 
     # --- STATE MANAGEMENT ---
     gen_state = {"left_logo": None, "right_logo": None, "watermark": None, "students_df": None}
@@ -562,22 +560,35 @@ def main(page: ft.Page):
     lbl_right = ft.Text("No right logo selected.", italic=True, size=12)
     lbl_watermark = ft.Text("No watermark selected.", italic=True, size=12)
     lbl_csv = ft.Text("No CSV loaded.", italic=True, size=12, color="red700") 
-    
     gen_status_text = ft.Text("", weight="bold", size=16)
 
-    gen_btn = ft.ElevatedButton("Generate PDF Document", icon="picture_as_pdf")
-    btn_upload_left = ft.ElevatedButton("Upload Left Logo", icon="image")
-    btn_upload_right = ft.ElevatedButton("Upload Right Logo", icon="image")
-    btn_upload_watermark = ft.ElevatedButton("Upload Watermark", icon="water_drop")
-    btn_upload_csv = ft.ElevatedButton("Upload Student CSV", icon="table_view")
+    # Empty Text property bypassing flet version bugs
+    gen_btn = ft.ElevatedButton()
+    gen_btn.text = "Generate PDF Document"
+    gen_btn.icon = "picture_as_pdf"
 
+    btn_upload_left = ft.ElevatedButton()
+    btn_upload_left.text = "Upload Left Logo"
+    btn_upload_left.icon = "image"
+
+    btn_upload_right = ft.ElevatedButton()
+    btn_upload_right.text = "Upload Right Logo"
+    btn_upload_right.icon = "image"
+
+    btn_upload_watermark = ft.ElevatedButton()
+    btn_upload_watermark.text = "Upload Watermark"
+    btn_upload_watermark.icon = "water_drop"
+
+    btn_upload_csv = ft.ElevatedButton()
+    btn_upload_csv.text = "Upload Student CSV"
+    btn_upload_csv.icon = "table_view"
 
     # --- EVALUATOR COMPONENTS (DEFENSIVE INSTANTIATION) ---
     ev_qs = ft.Dropdown(options=[ft.dropdown.Option("50"), ft.dropdown.Option("100")], value="100", width=200)
     ev_fill = ft.Slider(min=10, max=80, divisions=14, value=30)
     ev_key_lbl = ft.Text("No key uploaded. Using default pattern.", color="orange", italic=True)
 
-    # Empty instantiation WITH positional string to bypass constructor crashes
+    # Empty string inside parenthesis bypasses Flet version constructor crashing
     img_orig = ft.Image("")
     img_orig.width = 350
     img_orig.height = 350
@@ -592,14 +603,22 @@ def main(page: ft.Page):
 
     debug_txt = ft.Text("Upload a scan to begin.", size=14)
 
-    btn_ev_key = ft.ElevatedButton("Upload Master Key", icon="key")
-    btn_ev_calib = ft.ElevatedButton("Upload Scan for Testing", icon="upload")
-    btn_batch_upload = ft.ElevatedButton("Upload Batch Scans", icon="dynamic_feed")
-    btn_batch_export = ft.ElevatedButton("Download CSV Report", icon="download")
-    btn_batch_export.disabled = True
+    btn_ev_key = ft.ElevatedButton()
+    btn_ev_key.text = "Upload Master Key"
+    btn_ev_key.icon = "key"
 
-    btn_tab_calib = ft.ElevatedButton("📐 Calibration Debugger", data="calib")
-    btn_tab_batch = ft.ElevatedButton("🚀 Batch Processing", data="batch")
+    btn_ev_calib = ft.ElevatedButton()
+    btn_ev_calib.text = "Upload Scan for Testing"
+    btn_ev_calib.icon = "upload"
+
+    btn_batch_upload = ft.ElevatedButton()
+    btn_batch_upload.text = "Upload Batch Scans"
+    btn_batch_upload.icon = "dynamic_feed"
+
+    btn_batch_export = ft.ElevatedButton()
+    btn_batch_export.text = "Download CSV Report"
+    btn_batch_export.icon = "download"
+    btn_batch_export.disabled = True
 
     batch_prg = ft.ProgressBar(width=400, value=0, visible=False)
     batch_txt = ft.Text("")
@@ -757,9 +776,11 @@ def main(page: ft.Page):
                     debug_txt.value = f"✅ Analysis Complete\n\nUSN: {res['USN']}\nScore: {res['Score']}\nConfidence: {res['Confidence']}\nFlagged: {res['Flagged Questions']}"
                     
                     if d_orig is not None: 
+                        img_orig.src = ""
                         img_orig.src_base64 = cv2_to_base64(d_orig)
                         img_orig.visible = True
                     if d_warp is not None: 
+                        img_warp.src = ""
                         img_warp.src_base64 = cv2_to_base64(d_warp)
                         img_warp.visible = True
                 except Exception as ex:
@@ -847,45 +868,48 @@ def main(page: ft.Page):
 
 
     # ---------------------------------------------------------
-    # LAYOUT CONSTRUCTION
+    # LAYOUT CONSTRUCTION (MATCHING THE LIBRARY APP SIDEBAR)
     # ---------------------------------------------------------
     def on_format_change(e):
         omr_settings.visible = (format_dropdown.value == "OMR Answer Sheet")
         page.update()
     format_dropdown.on_change = on_format_change
 
-    general_settings = ft.Column(controls=[
+    # Pure Vertical Stacking prevents layout collision
+    generator_content = ft.Column(controls=[
+        ft.Text("📄 AMC Exam Sheet Generator", size=28, weight="bold"), 
+        ft.Divider(),
         ft.Text("1. General Settings", size=18, weight="bold"),
         format_dropdown,
         college_name,
         ft.Row(controls=[btn_upload_left, lbl_left]),
         ft.Row(controls=[btn_upload_right, lbl_right]),
-    ], spacing=15)
-
-    omr_settings = ft.Column(controls=[
-        ft.Divider(),
-        ft.Text("2. OMR Specific Settings", size=18, weight="bold"),
-        exam_type,
-        course_code,
-        num_qs_dropdown,
-        ft.Row(controls=[btn_upload_watermark, lbl_watermark]),
-        ft.Row(controls=[btn_upload_csv, lbl_csv]),
-        ft.Text("CSV Format Note: File must contain headers 'USN' and 'Name'", italic=True, size=12)
-    ], spacing=15)
-
-    generator_content = ft.Column(controls=[
-        ft.Text("📄 AMC Exam Sheet Generator", size=28, weight="bold"), ft.Divider(),
-        ft.Row(controls=[
-            general_settings, ft.Container(width=50), omr_settings
-        ]),
+        ft.Container(height=10),
+        
+        ft.Container(content=ft.Column(controls=[
+            ft.Text("2. OMR Specific Settings", size=18, weight="bold"),
+            exam_type,
+            course_code,
+            num_qs_dropdown,
+            ft.Row(controls=[btn_upload_watermark, lbl_watermark]),
+            ft.Row(controls=[btn_upload_csv, lbl_csv]),
+            ft.Text("CSV Format Note: File must contain headers 'USN' and 'Name'", italic=True, size=12)
+        ]), visible=True),
+        
         ft.Divider(),
         gen_btn, 
         gen_status_text
-    ])
+    ], scroll="auto", expand=True)
 
+    generator_view = ft.Container(content=generator_content, visible=True, expand=True, padding=20)
+
+    # --- EVALUATOR VIEWS ---
     eval_general = ft.Column(controls=[
         ft.Text("1. Evaluation Settings", size=18, weight="bold"),
-        ft.Row(controls=[ev_qs, ft.Text("Ink Threshold (Confidence):"), ev_fill]),
+        ft.Row(controls=[
+            ft.Column(controls=[ft.Text("Format"), ev_qs]),
+            ft.Column(controls=[ft.Text("Ink Threshold (Confidence)"), ft.Container(content=ev_fill, width=200)])
+        ]),
         ft.Row(controls=[btn_ev_key, ev_key_lbl])
     ], spacing=15)
 
@@ -893,11 +917,12 @@ def main(page: ft.Page):
         ft.Divider(),
         ft.Text("2. Single Scan Calibration", size=18, weight="bold"),
         ft.Row(controls=[btn_ev_calib]),
+        # wrap=True ensures images shift down on small screens instead of overlapping
         ft.Row(controls=[
             ft.Column(controls=[ft.Text("Metrics", weight="bold"), debug_txt], width=200),
             ft.Column(controls=[ft.Text("Corner Lock", weight="bold"), img_orig]),
             ft.Column(controls=[ft.Text("Math Grid", weight="bold"), img_warp])
-        ], vertical_alignment="start")
+        ], vertical_alignment="start", wrap=True)
     ], spacing=15)
 
     eval_batch = ft.Column(controls=[
@@ -916,8 +941,15 @@ def main(page: ft.Page):
             eval_debug.visible = False
             eval_batch.visible = True
         page.update()
-        
+
+    btn_tab_calib = ft.ElevatedButton()
+    btn_tab_calib.text = "📐 Calibration Debugger"
+    btn_tab_calib.data = "calib"
     btn_tab_calib.on_click = switch_eval_tab
+
+    btn_tab_batch = ft.ElevatedButton()
+    btn_tab_batch.text = "🚀 Batch Processing"
+    btn_tab_batch.data = "batch"
     btn_tab_batch.on_click = switch_eval_tab
 
     evaluator_content = ft.Column(controls=[
@@ -925,27 +957,44 @@ def main(page: ft.Page):
         eval_general, ft.Divider(),
         ft.Row(controls=[btn_tab_calib, btn_tab_batch]),
         eval_debug, eval_batch
-    ])
+    ], scroll="auto", expand=True)
 
-    view_container = ft.Container(content=generator_content)
+    evaluator_view = ft.Container(content=evaluator_content, visible=False, expand=True, padding=20)
 
-    def switch_main_view(e): 
-        if e.control.data == "gen":
-            view_container.content = generator_content
-        else:
-            view_container.content = evaluator_content
+    # --- SIDEBAR NAVIGATION (Mimicking main.py Library App) ---
+    def switch_page(e):
+        idx = e.control.selected_index
+        generator_view.visible = (idx == 0)
+        evaluator_view.visible = (idx == 1)
         page.update()
 
-    btn_nav_gen = ft.ElevatedButton("📄 Generator", data="gen", width=200, height=50)
-    btn_nav_eval = ft.ElevatedButton("🎯 Evaluator", data="eval", width=200, height=50)
-    btn_nav_gen.on_click = switch_main_view
-    btn_nav_eval.on_click = switch_main_view
+    sidebar = ft.NavigationRail(
+        selected_index=0,
+        label_type="all",
+        min_width=100,
+        min_extended_width=200,
+        group_alignment=-0.9,
+        destinations=[
+            ft.NavigationRailDestination(icon="picture_as_pdf", label="Generator"),
+            ft.NavigationRailDestination(icon="document_scanner", label="Evaluator"),
+        ],
+        on_change=switch_page,
+    )
 
-    page.add(ft.Column(controls=[
-        ft.Row(controls=[btn_nav_gen, btn_nav_eval]),
-        ft.Divider(),
-        view_container
-    ]))
+    main_layout = ft.Row(
+        controls=[
+            sidebar,
+            ft.VerticalDivider(width=1),
+            ft.Column(
+                controls=[generator_view, evaluator_view], 
+                alignment="start", 
+                expand=True
+            )
+        ],
+        expand=True,
+    )
+
+    page.add(main_layout)
 
 if __name__ == "__main__":
     ft.run(main)
