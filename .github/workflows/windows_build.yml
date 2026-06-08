@@ -24,13 +24,11 @@ jobs:
     - name: Install System Dependencies
       run: |
         python -m pip install --upgrade pip
-        # Swapped out flet for PySide6
         pip install PySide6 pyinstaller pandas opencv-python-headless pymupdf reportlab pyzbar
 
     - name: Build Executable with PyInstaller
       run: |
-        # Using raw PyInstaller with explicit formatting flags for desktop execution
-        pyinstaller --clean --onefile --windowed --name "AMC_Exam_Suite" --hidden-import reportlab.graphics.barcode.code128 --hidden-import reportlab.graphics.barcode.code93 --hidden-import reportlab.graphics.barcode.code39 --hidden-import reportlab.graphics.barcode.usps --hidden-import reportlab.graphics.barcode.usps4s --hidden-import reportlab.graphics.barcode.ecc200 --hidden-import reportlab.graphics.barcode.ecc200datamatrix --hidden-import reportlab.graphics.barcode.qr --hidden-import reportlab.graphics.barcode.qrencoder --hidden-import reportlab.graphics.barcode.lto AMC_Exam_Suite.py
+        pyinstaller --clean --onefile --windowed --name "AMC_Exam_Suite" --collect-all pyzbar --hidden-import reportlab.graphics.barcode.code128 --hidden-import reportlab.graphics.barcode.code93 --hidden-import reportlab.graphics.barcode.code39 --hidden-import reportlab.graphics.barcode.usps --hidden-import reportlab.graphics.barcode.usps4s --hidden-import reportlab.graphics.barcode.ecc200 --hidden-import reportlab.graphics.barcode.ecc200datamatrix --hidden-import reportlab.graphics.barcode.qr --hidden-import reportlab.graphics.barcode.qrencoder --hidden-import reportlab.graphics.barcode.lto AMC_Exam_Suite.py
 
     - name: Upload Artifact
       uses: actions/upload-artifact@v4
