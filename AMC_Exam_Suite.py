@@ -9,6 +9,12 @@ import cv2
 import numpy as np
 import fitz  # PyMuPDF
 
+# Pyzbar decoding integration for live identity harvesting
+try:
+    import pyzbar.pyzbar as pyzbar
+except ImportError:
+    pyzbar = None
+
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
     QListWidget, QStackedWidget, QLabel, QLineEdit, QPushButton, 
@@ -27,7 +33,6 @@ from reportlab.graphics.barcode import qr
 from reportlab.graphics.shapes import Drawing
 from reportlab.graphics import renderPDF
 
-# --- BYPASS STRICT COLLEGE SSL PROXY BLOCKS ---
 try:
     ssl._create_default_https_context = ssl._create_unverified_context
 except Exception:
@@ -37,7 +42,7 @@ DATASET_DIR = "omr_training_data/needs_review"
 os.makedirs(DATASET_DIR, exist_ok=True)
 
 # ==============================================================================
-# PART 1: EXACT PDF GENERATOR LOGIC (MATH & LAYOUT PRESERVED)
+# PART 1: OPTIMIZED PDF GENERATOR LOGIC (WITH LAYOUT IMPROVEMENTS)
 # ==============================================================================
 DROPOUT_GREY = colors.Color(0.6, 0.6, 0.6)
 OMR_PAGE_W, OMR_PAGE_H = A4
@@ -94,12 +99,15 @@ def draw_omr_titles_and_serial(c, y_start, exam_type):
     c.setFont("Helvetica-Bold", 14)
     omr_title_y = y_start - 9*mm
     c.drawCentredString(OMR_PAGE_W / 2, omr_title_y, "OMR ANSWER SHEET")
+    
+    # MODIFICATION: Moved Serial No bounding architecture to the left corner layout
     c.saveState(); c.setStrokeColor(DROPOUT_GREY)
     box_w = 35 * mm; box_h = 6 * mm
-    box_x = OMR_PAGE_W - OMR_MARGIN - box_w; box_y = omr_title_y - 1.5*mm 
+    box_x = OMR_MARGIN; box_y = omr_title_y - 1.5*mm 
     c.rect(box_x, box_y, box_w, box_h)
     c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 9)
-    c.drawString(box_x - 16*mm, box_y + 1.5*mm, "Serial No:"); c.restoreState()
+    c.drawString(box_x + box_w + 2*mm, box_y + 1.5*mm, "Serial No")
+    c.restoreState()
     return y_start - 11*mm
 
 def draw_omr_details_with_qr(c, y_start, student_name, usn, course_code):
@@ -115,7 +123,9 @@ def draw_omr_details_with_qr(c, y_start, student_name, usn, course_code):
     c.drawString(text_x, y_start - 7*mm, f"Student Name:  {student_name}")
     c.drawString(text_x, y_start - 13.5*mm, f"USN:           {usn}")
     c.drawString(text_x, y_start - 20*mm, f"Course Code:   {course_code}")
-    qr_data = f"{usn}|{course_code}"
+    
+    # Embed metadata mapping explicitly for real-time pyzbar retrieval
+    qr_data = f"{usn}|{student_name}|{course_code}"
     qr_code = qr.QrCodeWidget(qr_data)
     bounds = qr_code.getBounds()
     width = bounds[2] - bounds[0]
@@ -130,13 +140,21 @@ def draw_omr_instructions_compact(c, y_start):
     box_h = 12 * mm 
     y_bottom = y_start - box_h
     c.saveState(); c.setStrokeColor(DROPOUT_GREY); c.rect(OMR_MARGIN, y_bottom, OMR_CONTENT_W, box_h); c.restoreState()
-    c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 9)
-    c.drawString(OMR_MARGIN + 3*mm, y_start - 4*mm, "INSTRUCTIONS TO STUDENTS")
-    c.setFont("Helvetica", 7.5)
-    c.drawString(OMR_MARGIN + 3*mm, y_start - 7.5*mm, "1. No extra marking on OMR sheet.")
-    c.drawString(OMR_MARGIN + 55*mm, y_start - 7.5*mm, "3. Darken the circle completely.")
-    c.drawString(OMR_MARGIN + 3*mm, y_start - 10.5*mm, "2. Use Black Ball Point Pen ONLY.")
-    c.drawString(OMR_MARGIN + 55*mm, y_start - 10.5*mm, "4. Multiple markings are invalid.")
+    c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 8)
+    
+    # MODIFICATION: Added New Instruction inline right next to the title text without increasing box height
+    c.drawString(OMR_MARGIN + 3*mm, y_start - 3.5*mm, "INSTRUCTIONS TO STUDENTS:")
+    c.setFont("Helvetica-Bold", 7.2)
+    c.setFillColor(colors.Color(0.1, 0.1, 0.8)) # Blue emphasis font tint
+    c.drawString(OMR_MARGIN + 46*mm, y_start - 3.5*mm, "1. Before marking on OMR sheet verify your USN, Name and Course Code.")
+    
+    # Compressed remaining instructions to retain the compact layout matrix
+    c.setFillColor(colors.black); c.setFont("Helvetica", 7)
+    c.drawString(OMR_MARGIN + 3*mm, y_start - 7.0*mm, "2. Use Black Ball Point Pen ONLY.")
+    c.drawString(OMR_MARGIN + 3*mm, y_start - 10.0*mm, "3. No extra marking on OMR sheet.")
+    c.drawString(OMR_MARGIN + 52*mm, y_start - 7.0*mm, "4. Darken the circle completely.")
+    c.drawString(OMR_MARGIN + 52*mm, y_start - 10.0*mm, "5. Multiple markings are invalid.")
+    
     mid_right_x = OMR_PAGE_W - OMR_MARGIN - 65*mm
     labels_y = y_start - 4.5*mm
     c.setFont("Helvetica-Bold", 7); c.drawString(mid_right_x, labels_y, "CORRECT:")
@@ -166,10 +184,14 @@ def draw_isolated_version_block(c, y_start):
     c.saveState(); c.setStrokeColor(DROPOUT_GREY)
     c.rect(OMR_MARGIN, y_bottom, OMR_CONTENT_W, box_h)
     c.restoreState()
+    
+    # MODIFICATION: Enhanced and enlarged version black anchor block on the left edge for reliable CV structural registration
+    anchor_s = 5 * mm
     c.setFillColor(colors.black)
-    c.rect(OMR_MARGIN + 5*mm, y_bottom + 2*mm, 4*mm, 4*mm, fill=1, stroke=0)
+    c.rect(OMR_MARGIN + 1.5*mm, y_bottom + (box_h - anchor_s)/2, anchor_s, anchor_s, fill=1, stroke=0)
+    
     c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 10)
-    c.drawString(OMR_MARGIN + 15*mm, y_bottom + 2.8*mm, "Question Paper Version Code:")
+    c.drawString(OMR_MARGIN + 10*mm, y_bottom + 2.8*mm, "Question Paper Version Code:")
     bubble_y = y_bottom + 4*mm 
     start_x = OMR_MARGIN + 75*mm 
     spacing = 11 * mm 
@@ -276,7 +298,7 @@ def generate_caed_pdf(college, left_logo, right_logo):
     c.line(x+col1, footer_bottom_y, x+col1, footer_top_y); c.setFont("Helvetica-Bold", 10); c.drawString(x+5*mm, footer_bottom_y + 5*mm, "Question No:")
     x += col1; c.line(x+col2, footer_bottom_y, x+col2, footer_top_y); c.drawString(x+5*mm, footer_bottom_y + 5*mm, "USN:")
     x += col2; c.line(x+col3, footer_bottom_y, x+col3, footer_top_y); c.drawString(x+5*mm, footer_bottom_y + 5*mm, "Student's Signature")
-    x += col3; ex_w = col4 / 2; c.line(x+ex_w, footer_bottom_y, x+ex_w, footer_top_y); c.drawString(x+5*mm, footer_bottom_y + 5*mm, "Examiner 1"); c.drawString(x+ex_w+5*mm, footer_bottom_y + 5*mm, "Examiner 2")
+    x += col2; ex_w = col4 / 2; c.line(x+ex_w, footer_bottom_y, x+ex_w, footer_top_y); c.drawString(x+5*mm, footer_bottom_y + 5*mm, "Examiner 1"); c.drawString(x+ex_w+5*mm, footer_bottom_y + 5*mm, "Examiner 2")
     drawing_bottom = footer_top_y + 5*mm; drawing_height = drawing_top - drawing_bottom
     c.setLineWidth(1.5); c.rect(margin, drawing_bottom, content_w, drawing_height)
     c.showPage(); c.save(); buffer.seek(0)
@@ -317,7 +339,7 @@ def generate_diary_pdf(college, left_logo, right_logo):
     return buffer
 
 # ==============================================================================
-# PART 2: EXACT CV EVALUATOR LOGIC (MATH PRESERVED)
+# PART 2: COMPUTER VISION EVALUATION & DECODING ARCHITECTURE
 # ==============================================================================
 CONFIG_50Q = {
     'warped_w': 1450, 'warped_h': 1380, 'cols': 3, 'rows': 17, 'col_w': 1500 / 3.0,    
@@ -391,11 +413,38 @@ def find_anchors_and_warp(image, config):
 
 def evaluate_image(image, multi_master_key, fill_percentage, config):
     flagged_log = []
+    
+    # DYNAMIC IDENTITY MATRIX RECOGNITION (Pyzbar QR Processing Stream)
+    harvested_usn, harvested_name, harvested_course = "Unknown USN", "Unknown Student", "Unknown Course"
+    if pyzbar is not None:
+        try:
+            detected_qrs = pyzbar.decode(image)
+            if not detected_qrs:
+                # Fallback to look inside a downscaled version if necessary
+                detected_qrs = pyzbar.decode(cv2.resize(image, (0,0), fx=0.5, fy=0.5))
+            if detected_qrs:
+                qr_string = detected_qrs[0].data.decode('utf-8')
+                tokens = qr_string.split('|')
+                if len(tokens) >= 3:
+                    harvested_usn, harvested_name, harvested_course = tokens[0], tokens[1], tokens[2]
+        except Exception:
+            pass
+
     res = find_anchors_and_warp(image, config)
+    # MODIFICATION: Returning dictionary outputs structured strictly to matching requested column tracking format
     if res[0] == "TOO_DARK":
-        return {"USN": "Error", "Course": "Error", "Version": "N/A", "Score": 0, "Confidence": "0%", "Needs Moderation": "YES", "Flagged Questions": "Invalid Scan (Dark)", "Status": "Scan rejected: Image too dark."}, image.copy(), None
+        return {
+            "USN": "ERR_DARK", "Name": "Unreadable", "Course": "Unreadable", "Version": "N/A", 
+            "Status": "Scan rejected: Dark Matrix", "Score": 0, "Confidence": "0%", 
+            "Flagged Questions": "Invalid Scan", "Needs Moderation": "YES"
+        }, image.copy(), None
+        
     if res[0] is None:
-        return {"USN": "Error", "Course": "Error", "Version": "N/A", "Score": 0, "Confidence": "0%", "Needs Moderation": "YES", "Flagged Questions": "Anchors Lost", "Status": "Processing Failure: Sheet grid anchors could not be verified."}, image.copy(), None
+        return {
+            "USN": "ERR_ALIGN", "Name": "Unreadable", "Course": "Unreadable", "Version": "N/A", 
+            "Status": "Failed: Structural Anchors Lost", "Score": 0, "Confidence": "0%", 
+            "Flagged Questions": "Anchors Lost", "Needs Moderation": "YES"
+        }, image.copy(), None
         
     corners, thresh, gray, version_anchor, warped_thresh, warped_color = res
     debug_original = image.copy()
@@ -418,12 +467,12 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
         if v_fills[0][0] > fill_percentage:
             detected_version = ['A', 'B', 'C', 'D'][v_fills[0][1]]
         else:
-            detected_version = "Blank"; flags_count += 1; needs_moderation = "YES"; flagged_log.append("Version Code (Unclear)")
+            detected_version = "Blank"; flags_count += 1; needs_moderation = "YES"; flagged_log.append("Version Unclear")
             
     actual_score, final_status = 0, "Evaluated Successfully"
     active_key = multi_master_key.get(detected_version, {}) if detected_version in ['A', 'B', 'C', 'D'] else multi_master_key.get('A', {})
     if detected_version not in ['A', 'B', 'C', 'D']:
-        final_status = "Warning: Version Code Invalid."
+        final_status = "Warning: Invalid Version Code."
         
     q_current = 1
     bubble_area = 3.1415 * (config['b_radius'] ** 2)
@@ -463,24 +512,23 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
                 for fm in valid_marks:
                     bx, by = int(b_start_x + (fm[1] * config['b_spacing'])), int(curr_y)
                     cv2.circle(warped_color, (bx, by), config['b_radius']+3, (0, 165, 255), 3)
-            else:
-                if str(q_current) in active_key or q_current in active_key:
-                    pass 
             q_current += 1
             curr_y += config['row_h']
             
+    # MODIFICATION: Structured outputs to follow requested structural alignment rules mapping sequence
     return {
-        "USN": "Harvesteded", "Course": "Verified", "Version": detected_version,
-        "Score": actual_score, "Confidence": f"{max(5, 100 - (flags_count * 2))}%",
-        "Needs Moderation": needs_moderation, "Flagged Questions": ", ".join(flagged_log) if flagged_log else "None",
-        "Status": final_status
+        "USN": harvested_usn, "Name": harvested_name, "Course": harvested_course,
+        "Version": detected_version, "Status": final_status, "Score": actual_score, 
+        "Confidence": f"{max(5, 100 - (flags_count * 2))}%",
+        "Flagged Questions": ", ".join(flagged_log) if flagged_log else "None", 
+        "Needs Moderation": needs_moderation
     }, debug_original, warped_color
 
 # ==============================================================================
 # PART 3: QT Worker Threads for Non-Blocking Operations
 # ==============================================================================
 class GenerationWorker(QThread):
-    status_signal = Signal(str, str) # text, color
+    status_signal = Signal(str, str)
     
     def __init__(self, state, save_path, fmt, col, crs, exam, qs):
         super().__init__()
@@ -514,7 +562,7 @@ class GenerationWorker(QThread):
             self.status_signal.emit(f"❌ Generation Error: {str(e)}", "red")
 
 class EvaluationWorker(QThread):
-    progress_signal = Signal(int, str) # current item, log text
+    progress_signal = Signal(int, str)
     row_signal = Signal(dict)
     finished_signal = Signal()
     
@@ -597,7 +645,6 @@ class GeneratorPanel(QWidget):
         layout.addWidget(self.lbl_nq)
         layout.addWidget(self.num_qs)
         
-        # Select Buttons Row
         btn_layout = QHBoxLayout()
         self.btn_left = QPushButton("Upload Left Logo")
         self.lbl_left = QLabel("Default: None")
@@ -631,7 +678,6 @@ class GeneratorPanel(QWidget):
         layout.addWidget(self.status_lbl)
         layout.addStretch()
         
-        # Connections
         self.format_dropdown.currentTextChanged.connect(self.toggle_format_fields)
         self.btn_left.clicked.connect(lambda: self.pick_file("left_logo", self.lbl_left, "Images (*.png *.jpg *.jpeg)"))
         self.btn_right.clicked.connect(lambda: self.pick_file("right_logo", self.lbl_right, "Images (*.png *.jpg *.jpeg)"))
@@ -701,10 +747,9 @@ class EvaluatorPanel(QWidget):
         title = QLabel("<h2>🎯 Advanced Computer Vision Engine</h2>")
         layout.addWidget(title)
         
-        # Controls Subgrid
         ctrl_layout = QHBoxLayout()
-        self.ev_qs = QComboBox()
-        self.ev_qs.addItems(["50 Questions Architecture", "100 Questions Architecture"])
+        self.example_qs = QComboBox()
+        self.example_qs.addItems(["50 Questions Architecture", "100 Questions Architecture"])
         
         self.slider_lbl = QLabel("Sensitivity Filter Threshold: 30%")
         self.ev_fill = QSlider(Qt.Horizontal)
@@ -713,12 +758,11 @@ class EvaluatorPanel(QWidget):
         self.ev_fill.valueChanged.connect(lambda v: self.slider_lbl.setText(f"Sensitivity Filter Threshold: {v}%"))
         
         ctrl_layout.addWidget(QLabel("Layout Mode:"))
-        ctrl_layout.addWidget(self.ev_qs)
+        ctrl_layout.addWidget(self.example_qs)
         ctrl_layout.addWidget(self.slider_lbl)
         ctrl_layout.addWidget(self.ev_fill)
         layout.addLayout(ctrl_layout)
         
-        # Action Bar Buttons
         actions_layout = QHBoxLayout()
         self.btn_key = QPushButton("Upload Master Key Mapping")
         self.lbl_key = QLabel("Using factory fallback structural key patterns")
@@ -727,7 +771,6 @@ class EvaluatorPanel(QWidget):
         actions_layout.addWidget(self.lbl_key)
         layout.addLayout(actions_layout)
         
-        # Tab Switching Buttons (Replacing Flet internal custom components)
         tabs_bar = QHBoxLayout()
         self.btn_tab_calib = QPushButton("Calibration & Analytical Matrix")
         self.btn_tab_batch = QPushButton("Batch Verification Workflow")
@@ -735,7 +778,6 @@ class EvaluatorPanel(QWidget):
         tabs_bar.addWidget(self.btn_tab_batch)
         layout.addLayout(tabs_bar)
         
-        # Internal Stack Framework
         self.sub_stack = QStackedWidget()
         layout.addWidget(self.sub_stack)
         
@@ -780,10 +822,13 @@ class EvaluatorPanel(QWidget):
         self.batch_prg.setVisible(False)
         self.batch_txt = QLabel("")
         
-        # Data Viewport Table (Native QTableWidget)
+        # MODIFICATION: Reordered and structured the data frame columns to match your exact request
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
-        self.table.setHorizontalHeaderLabels(["USN Target", "Calculated Score", "Confidence Matrix", "Flagged Exceptions", "Source File"])
+        self.table.setColumnCount(9)
+        self.table.setHorizontalHeaderLabels([
+            "USN Target", "Name", "Course", "Version", "Status", 
+            "Calculated Score", "Confidence Matrix", "Flagged Exceptions", "Needs Moderation"
+        ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         
         pb_layout.addLayout(batch_btns)
@@ -794,7 +839,6 @@ class EvaluatorPanel(QWidget):
         self.sub_stack.addWidget(self.page_calib)
         self.sub_stack.addWidget(self.page_batch)
         
-        # Connections
         self.btn_tab_calib.clicked.connect(lambda: self.sub_stack.setCurrentIndex(0))
         self.btn_tab_batch.clicked.connect(lambda: self.sub_stack.setCurrentIndex(1))
         self.btn_key.clicked.connect(self.load_key_matrix)
@@ -832,7 +876,7 @@ class EvaluatorPanel(QWidget):
         if not path: return
         
         self.debug_txt.setText("⏳ Initializing Computer Vision pipeline parsing matrices...")
-        cfg = CONFIG_50Q if "50" in self.ev_qs.currentText() else CONFIG_100Q
+        cfg = CONFIG_50Q if "50" in self.example_qs.currentText() else CONFIG_100Q
         
         try:
             if path.lower().endswith('.pdf'):
@@ -848,14 +892,13 @@ class EvaluatorPanel(QWidget):
             
             res, orig_debug, warp_debug = evaluate_image(img, self.key_dict, self.ev_fill.value() / 100.0, cfg)
             
-            # Convert CV2 Matrices to Native Qt Image Frames
             self.display_matrix(orig_debug, self.view_orig)
             if warp_debug is not None:
                 self.display_matrix(warp_debug, self.view_warp)
             else:
                 self.view_warp.setText("[Warp Missing]")
                 
-            log_metrics = f"<b>USN Match:</b> {res['USN']} | <b>Score Vector:</b> {res['Score']} | <b>Confidence:</b> {res['Confidence']}<br><b>Exception Diagnostics:</b> {res['Flagged Questions']}<br><b>System Telemetry:</b> {res['Status']}"
+            log_metrics = f"<b>USN:</b> {res['USN']} | <b>Name:</b> {res['Name']} | <b>Course:</b> {res['Course']}<br><b>Score Vector:</b> {res['Score']} | <b>Confidence:</b> {res['Confidence']} | <b>Version:</b> {res['Version']}<br><b>Exception Diagnostics:</b> {res['Flagged Questions']}"
             self.debug_txt.setText(log_metrics)
         except Exception as e:
             self.debug_txt.setText(f"❌ Core processing failure: {str(e)}")
@@ -877,7 +920,7 @@ class EvaluatorPanel(QWidget):
         self.batch_prg.setValue(0)
         self.btn_batch_upload.setEnabled(False)
         
-        cfg = CONFIG_50Q if "50" in self.ev_qs.currentText() else CONFIG_100Q
+        cfg = CONFIG_50Q if "50" in self.example_qs.currentText() else CONFIG_100Q
         
         self.batch_worker = EvaluationWorker(paths, self.key_dict, self.ev_fill.value(), cfg)
         self.batch_worker.progress_signal.connect(self.handle_batch_progress)
@@ -887,7 +930,6 @@ class EvaluatorPanel(QWidget):
 
     def handle_batch_progress(self, current_count, text):
         self.batch_txt.setText(text)
-        # Update progress bar ratio safely
         if self.batch_worker.paths:
             ratio = int((current_count / len(self.batch_worker.paths)) * 100)
             self.batch_prg.setValue(ratio)
@@ -897,11 +939,16 @@ class EvaluatorPanel(QWidget):
         row_idx = self.table.rowCount()
         self.table.insertRow(row_idx)
         
+        # MODIFICATION: Re-ordered view-mapping inputs to display elements exactly according to the structured sequence
         self.table.setItem(row_idx, 0, QTableWidgetItem(str(row_data.get("USN", "Error"))))
-        self.table.setItem(row_idx, 1, QTableWidgetItem(str(row_data.get("Score", 0))))
-        self.table.setItem(row_idx, 2, QTableWidgetItem(str(row_data.get("Confidence", "0%"))))
-        self.table.setItem(row_idx, 3, QTableWidgetItem(str(row_data.get("Flagged Questions", "None"))))
-        self.table.setItem(row_idx, 4, QTableWidgetItem(str(row_data.get("File Name", ""))))
+        self.table.setItem(row_idx, 1, QTableWidgetItem(str(row_data.get("Name", "Error"))))
+        self.table.setItem(row_idx, 2, QTableWidgetItem(str(row_data.get("Course", "Error"))))
+        self.table.setItem(row_idx, 3, QTableWidgetItem(str(row_data.get("Version", "N/A"))))
+        self.table.setItem(row_idx, 4, QTableWidgetItem(str(row_data.get("Status", ""))))
+        self.table.setItem(row_idx, 5, QTableWidgetItem(str(row_data.get("Score", 0))))
+        self.table.setItem(row_idx, 6, QTableWidgetItem(str(row_data.get("Confidence", "0%"))))
+        self.table.setItem(row_idx, 7, QTableWidgetItem(str(row_data.get("Flagged Questions", "None"))))
+        self.table.setItem(row_idx, 8, QTableWidgetItem(str(row_data.get("Needs Moderation", "NO"))))
 
     def handle_batch_finished(self):
         self.batch_prg.setVisible(False)
@@ -911,17 +958,21 @@ class EvaluatorPanel(QWidget):
 
     def export_csv(self):
         if not self.results_cache: return
+        # MODIFICATION: Changed standard export file reference naming to point cleanly towards "OMR_Report_Manifest.csv"
         save_path, _ = QFileDialog.getSaveFileName(self, "Export Evaluation Statistics", "OMR_Report_Manifest.csv", "Spreadsheets (*.csv)")
         if save_path:
             try:
+                # Format exactly to matching the casing and requested column alignment layout order
+                export_ordered_fields = ["USN", "Name", "Course", "Version", "Status", "Score", "Confidence", "Flagged Questions", "Needs Moderation"]
                 df = pd.DataFrame(self.results_cache)
+                df = df.reindex(columns=export_ordered_fields)
                 df.to_csv(save_path, index=False)
                 self.batch_txt.setText(f"✅ CSV Export written successfully to: {os.path.basename(save_path)}")
             except Exception as e:
                 self.batch_txt.setText(f"❌ Export file permission fault: {str(e)}")
 
 # ==============================================================================
-# PART 5: MAIN INTEGRATION DESKTOP SYSTEM CONTROLLER
+# PART 5: MAIN SYSTEM WINDOW PANEL CONTROLLER
 # ==============================================================================
 class AMCExamSuiteMainWindow(QMainWindow):
     def __init__(self):
@@ -940,7 +991,6 @@ class AMCExamSuiteMainWindow(QMainWindow):
         root_layout.setContentsMargins(0, 0, 0, 0)
         root_layout.setSpacing(0)
         
-        # Dynamic Modular Navigation Sidebar
         self.sidebar = QListWidget()
         self.sidebar.setFixedWidth(240)
         self.sidebar.addItems([
@@ -948,7 +998,6 @@ class AMCExamSuiteMainWindow(QMainWindow):
             "🎯 Computer Vision Evaluator"
         ])
         
-        # Central View Port Panel Stack
         self.viewport_stack = QStackedWidget()
         self.gen_panel = GeneratorPanel(self.global_state)
         self.eval_panel = EvaluatorPanel()
@@ -959,7 +1008,6 @@ class AMCExamSuiteMainWindow(QMainWindow):
         root_layout.addWidget(self.sidebar)
         root_layout.addWidget(self.viewport_stack)
         
-        # Syncing navigation clicks to display correct interfaces
         self.sidebar.currentRowChanged.connect(self.viewport_stack.setCurrentIndex)
         self.sidebar.setCurrentRow(0)
 
@@ -969,100 +1017,26 @@ class AMCExamSuiteMainWindow(QMainWindow):
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     
-    # Modern Enterprise Dark Slate styling architecture using QSS
     app.setStyleSheet("""
-        QMainWindow {
-            background-color: #f8fafc;
-        }
-        QListWidget {
-            background-color: #0f172a;
-            color: #cbd5e1;
-            font-size: 14px;
-            border: none;
-        }
-        QListWidget::item {
-            padding: 18px 14px;
-            border-bottom: 1px solid #1e293b;
-        }
-        QListWidget::item:hover {
-            background-color: #1e293b;
-        }
-        QListWidget::item:selected {
-            background-color: #2563eb;
-            color: white;
-            font-weight: bold;
-        }
-        QStackedWidget {
-            background-color: #ffffff;
-        }
-        QLabel {
-            color: #334155;
-            font-size: 13px;
-        }
-        QLineEdit, QComboBox {
-            padding: 8px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 5px;
-            background-color: #ffffff;
-            color: #1e293b;
-            font-size: 13px;
-        }
-        QLineEdit:focus, QComboBox:focus {
-            border: 1px solid #2563eb;
-        }
-        QPushButton {
-            background-color: #e2e8f0;
-            color: #0f172a;
-            padding: 8px 16px;
-            border-radius: 5px;
-            font-weight: bold;
-            font-size: 13px;
-            border: 1px solid #cbd5e1;
-        }
-        QPushButton:hover {
-            background-color: #cbd5e1;
-        }
-        QPushButton#PrimaryAction, QPushButton:hover#PrimaryAction {
-            background-color: #2563eb;
-            color: white;
-            border: none;
-            padding: 12px;
-        }
-        QPushButton:hover#PrimaryAction {
-            background-color: #1d4ed8;
-        }
-        QTableWidget {
-            background-color: #ffffff;
-            border: 1px solid #e2e8f0;
-            gridline-color: #e2e8f0;
-            border-radius: 4px;
-        }
-        QHeaderView::section {
-            background-color: #f1f5f9;
-            padding: 6px;
-            font-weight: bold;
-            border: 1px solid #e2e8f0;
-        }
-        QSlider::groove:horizontal {
-            height: 6px;
-            background: #cbd5e1;
-            border-radius: 3px;
-        }
-        QSlider::handle:horizontal {
-            background: #2563eb;
-            width: 14px;
-            margin: -4px 0;
-            border-radius: 7px;
-        }
-        QProgressBar {
-            text-align: center;
-            border: 1px solid #cbd5e1;
-            border-radius: 4px;
-            background: #f1f5f9;
-        }
-        QProgressBar::chunk {
-            background-color: #2563eb;
-        }
+        QMainWindow { background-color: #f8fafc; }
+        QListWidget { background-color: #0f172a; color: #cbd5e1; font-size: 14px; border: none; }
+        QListWidget::item { padding: 18px 14px; border-bottom: 1px solid #1e293b; }
+        QListWidget::item:hover { background-color: #1e293b; }
+        QListWidget::item:selected { background-color: #2563eb; color: white; font-weight: bold; }
+        QStackedWidget { background-color: #ffffff; }
+        QLabel { color: #334155; font-size: 13px; }
+        QLineEdit, QComboBox { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 5px; background-color: #ffffff; color: #1e293b; font-size: 13px; }
+        QLineEdit:focus, QComboBox:focus { border: 1px solid #2563eb; }
+        QPushButton { background-color: #e2e8f0; color: #0f172a; padding: 8px 16px; border-radius: 5px; font-weight: bold; font-size: 13px; border: 1px solid #cbd5e1; }
+        QPushButton:hover { background-color: #cbd5e1; }
+        QPushButton#PrimaryAction, QPushButton:hover#PrimaryAction { background-color: #2563eb; color: white; border: none; padding: 12px; }
+        QPushButton:hover#PrimaryAction { background-color: #1d4ed8; }
+        QTableWidget { background-color: #ffffff; border: 1px solid #e2e8f0; gridline-color: #e2e8f0; border-radius: 4px; }
+        QHeaderView::section { background-color: #f1f5f9; padding: 6px; font-weight: bold; border: 1px solid #e2e8f0; }
+        QSlider::groove:horizontal { height: 6px; background: #cbd5e1; border-radius: 3px; }
+        QSlider::handle:horizontal { background: #2563eb; width: 14px; margin: -4px 0; border-radius: 7px; }
+        QProgressBar { text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; background: #f1f5f9; }
+        QProgressBar::chunk { background-color: #2563eb; }
     """)
     
     suite_window = AMCExamSuiteMainWindow()
