@@ -49,12 +49,12 @@ OMR_PAGE_W, OMR_PAGE_H = A4
 OMR_MARGIN = 10 * mm
 OMR_CONTENT_W = OMR_PAGE_W - (2 * OMR_MARGIN)
 
-def draw_official_header(c, width, y_top, left_logo, right_logo, college_name, is_caed=False, compact=False):
+def draw_official_header(c, width, y_top, left_logo, right_logo, inst_name, inst_address, inst_affiliation, inst_accreditation, is_caed=False, compact=False):
     c.saveState()
     if compact:
-        logo_size = 18 * mm; font_main = 14; font_sub = 8; spacing = 4 * mm
+        logo_size = 18 * mm; font_main = 14; font_sub1 = 8; font_sub2 = 7.5; font_sub3 = 7; spacing = 4 * mm
     else:
-        logo_size = 22 * mm; font_main = 16; font_sub = 9; spacing = 5 * mm
+        logo_size = 22 * mm; font_main = 16; font_sub1 = 9.5; font_sub2 = 9; font_sub3 = 8.5; spacing = 5 * mm
 
     margin_x = 8 * mm if is_caed else 10 * mm
     if left_logo:
@@ -71,13 +71,17 @@ def draw_official_header(c, width, y_top, left_logo, right_logo, college_name, i
 
     c.setFillColor(colors.black)
     center_x = width / 2
+    
+    # Render proportionate text sizes based on user inputs
     c.setFont("Helvetica-Bold", font_main)
-    c.drawCentredString(center_x, y_top, college_name)
-    c.setFont("Helvetica", font_sub)
-    c.drawCentredString(center_x, y_top - spacing, "AMC Campus, Bannerghatta Road, Bengaluru, Karnataka - 560083")
-    c.drawCentredString(center_x, y_top - (2*spacing), "Autonomous Institution Affiliated to VTU, Belagavi")
-    c.setFont("Helvetica-Bold", font_sub)
-    c.drawCentredString(center_x, y_top - (3*spacing), "Approved by AICTE, New Delhi | NAAC A+ Accredited")
+    c.drawCentredString(center_x, y_top, inst_name)
+    c.setFont("Helvetica", font_sub1)
+    c.drawCentredString(center_x, y_top - spacing, inst_address)
+    c.setFont("Helvetica", font_sub2)
+    c.drawCentredString(center_x, y_top - (2*spacing), inst_affiliation)
+    c.setFont("Helvetica-Bold", font_sub3)
+    c.drawCentredString(center_x, y_top - (3*spacing), inst_accreditation)
+    
     c.restoreState()
     return y_top - (3*spacing) - 2*mm
 
@@ -100,14 +104,10 @@ def draw_omr_titles_and_serial(c, y_start, exam_type):
     omr_title_y = y_start - 9*mm
     c.drawCentredString(OMR_PAGE_W / 2, omr_title_y, "OMR ANSWER SHEET")
     
-    # MODIFICATION: Moved Serial No bounding architecture to the left corner layout
-    c.saveState(); c.setStrokeColor(DROPOUT_GREY)
-    box_w = 35 * mm; box_h = 6 * mm
-    box_x = OMR_MARGIN; box_y = omr_title_y - 1.5*mm 
-    c.rect(box_x, box_y, box_w, box_h)
-    c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 9)
-    c.drawString(box_x + box_w + 2*mm, box_y + 1.5*mm, "Serial No")
-    c.restoreState()
+    # MODIFICATION: Removed text box, moved serial no mapping to the far left
+    c.setFont("Helvetica-Bold", 10)
+    c.drawString(OMR_MARGIN, omr_title_y, "Serial No:  ________________")
+    
     return y_start - 11*mm
 
 def draw_omr_details_with_qr(c, y_start, student_name, usn, course_code):
@@ -124,16 +124,17 @@ def draw_omr_details_with_qr(c, y_start, student_name, usn, course_code):
     c.drawString(text_x, y_start - 13.5*mm, f"USN:           {usn}")
     c.drawString(text_x, y_start - 20*mm, f"Course Code:   {course_code}")
     
-    # Embed metadata mapping explicitly for real-time pyzbar retrieval
+    # MODIFICATION: Scaled QR Code larger to improve Pyzbar scanning reliability natively
     qr_data = f"{usn}|{student_name}|{course_code}"
     qr_code = qr.QrCodeWidget(qr_data)
     bounds = qr_code.getBounds()
     width = bounds[2] - bounds[0]
     height = bounds[3] - bounds[1]
-    qr_size = 16 * mm
+    qr_size = 20 * mm
     d = Drawing(qr_size, qr_size, transform=[qr_size/width, 0, 0, qr_size/height, 0, 0])
     d.add(qr_code)
-    renderPDF.draw(d, c, mid_x + 14.5*mm, y_bottom + 3*mm)
+    # Centered in the right-side box
+    renderPDF.draw(d, c, mid_x + 12.5*mm, y_bottom + 1*mm)
     return y_bottom - 2*mm 
 
 def draw_omr_instructions_compact(c, y_start):
@@ -142,25 +143,26 @@ def draw_omr_instructions_compact(c, y_start):
     c.saveState(); c.setStrokeColor(DROPOUT_GREY); c.rect(OMR_MARGIN, y_bottom, OMR_CONTENT_W, box_h); c.restoreState()
     c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 8)
     
-    # MODIFICATION: Added New Instruction inline right next to the title text without increasing box height
     c.drawString(OMR_MARGIN + 3*mm, y_start - 3.5*mm, "INSTRUCTIONS TO STUDENTS:")
     c.setFont("Helvetica-Bold", 7.2)
-    c.setFillColor(colors.Color(0.1, 0.1, 0.8)) # Blue emphasis font tint
+    
+    # MODIFICATION: First instruction is now black.
+    c.setFillColor(colors.black)
     c.drawString(OMR_MARGIN + 46*mm, y_start - 3.5*mm, "1. Before marking on OMR sheet verify your USN, Name and Course Code.")
     
-    # Compressed remaining instructions to retain the compact layout matrix
-    c.setFillColor(colors.black); c.setFont("Helvetica", 7)
+    c.setFont("Helvetica", 7)
     c.drawString(OMR_MARGIN + 3*mm, y_start - 7.0*mm, "2. Use Black Ball Point Pen ONLY.")
     c.drawString(OMR_MARGIN + 3*mm, y_start - 10.0*mm, "3. No extra marking on OMR sheet.")
     c.drawString(OMR_MARGIN + 52*mm, y_start - 7.0*mm, "4. Darken the circle completely.")
     c.drawString(OMR_MARGIN + 52*mm, y_start - 10.0*mm, "5. Multiple markings are invalid.")
     
-    mid_right_x = OMR_PAGE_W - OMR_MARGIN - 65*mm
+    # MODIFICATION: Moved Correct/Wrong examples further right to prevent overlap.
+    mid_right_x = OMR_PAGE_W - OMR_MARGIN - 50*mm
     labels_y = y_start - 4.5*mm
     c.setFont("Helvetica-Bold", 7); c.drawString(mid_right_x, labels_y, "CORRECT:")
-    c.saveState(); c.setFillColor(DROPOUT_GREY); c.circle(mid_right_x + 25*mm, labels_y + 1.5*mm, 3*mm, fill=1, stroke=0); c.restoreState()
+    c.saveState(); c.setFillColor(DROPOUT_GREY); c.circle(mid_right_x + 20*mm, labels_y + 1.5*mm, 3*mm, fill=1, stroke=0); c.restoreState()
     c.drawString(mid_right_x, labels_y - 6*mm, "WRONG:")
-    gap = 10*mm; start_ex = mid_right_x + 20*mm; ex_y = labels_y - 6*mm + 1.5*mm 
+    gap = 8*mm; start_ex = mid_right_x + 15*mm; ex_y = labels_y - 6*mm + 1.5*mm 
     c.saveState(); c.setStrokeColor(DROPOUT_GREY)
     c.circle(start_ex, ex_y, 3*mm); c.line(start_ex-2*mm, ex_y-2*mm, start_ex+2*mm, ex_y+2*mm); c.line(start_ex-2*mm, ex_y+2*mm, start_ex+2*mm, ex_y-2*mm)
     c.circle(start_ex+gap, ex_y, 3*mm); c.line(start_ex+gap-2*mm, ex_y, start_ex+gap-0.5*mm, ex_y-2*mm); c.line(start_ex+gap-0.5*mm, ex_y-2*mm, start_ex+gap+2*mm, ex_y+2*mm)
@@ -185,7 +187,6 @@ def draw_isolated_version_block(c, y_start):
     c.rect(OMR_MARGIN, y_bottom, OMR_CONTENT_W, box_h)
     c.restoreState()
     
-    # MODIFICATION: Enhanced and enlarged version black anchor block on the left edge for reliable CV structural registration
     anchor_s = 5 * mm
     c.setFillColor(colors.black)
     c.rect(OMR_MARGIN + 1.5*mm, y_bottom + (box_h - anchor_s)/2, anchor_s, anchor_s, fill=1, stroke=0)
@@ -256,7 +257,7 @@ def draw_4_corner_question_block(c, x_start, y_start, block_w, num_qs):
             q_current += 1
     return y_bottom
 
-def generate_batch_omr_pdf(college, left_logo, right_logo, watermark, students_data, course_code, exam_type, num_qs):
+def generate_batch_omr_pdf(inst_name, inst_address, inst_affiliation, inst_accreditation, left_logo, right_logo, watermark, students_data, course_code, exam_type, num_qs):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     for _, student in students_data.iterrows():
@@ -264,7 +265,7 @@ def generate_batch_omr_pdf(college, left_logo, right_logo, watermark, students_d
         name = str(student.get('Name', student.iloc[1]))
         draw_omr_watermark(c, watermark)
         y_start = OMR_PAGE_H - 12*mm 
-        curr_y = draw_official_header(c, OMR_PAGE_W, y_start, left_logo, right_logo, college)
+        curr_y = draw_official_header(c, OMR_PAGE_W, y_start, left_logo, right_logo, inst_name, inst_address, inst_affiliation, inst_accreditation)
         curr_y = draw_omr_titles_and_serial(c, curr_y, exam_type) 
         curr_y = draw_omr_details_with_qr(c, curr_y, name, usn, course_code) 
         curr_y = draw_omr_instructions_compact(c, curr_y)
@@ -281,12 +282,12 @@ def generate_batch_omr_pdf(college, left_logo, right_logo, watermark, students_d
     buffer.seek(0)
     return buffer
 
-def generate_caed_pdf(college, left_logo, right_logo):
+def generate_caed_pdf(inst_name, inst_address, inst_affiliation, inst_accreditation, left_logo, right_logo):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=landscape(A4))
     width, height = landscape(A4); margin = 5 * mm; content_w = width - 2*margin
     y_header_start = height - 10*mm
-    header_bottom_y = draw_official_header(c, width, y_header_start, left_logo, right_logo, college, is_caed=True)
+    header_bottom_y = draw_official_header(c, width, y_header_start, left_logo, right_logo, inst_name, inst_address, inst_affiliation, inst_accreditation, is_caed=True)
     title_line_y = header_bottom_y - 6*mm
     c.setFont("Helvetica-Bold", 12); c.drawCentredString(width/2, title_line_y, "PRINTOUT SHEET FOR ALL COMPUTER AIDED DRAWING SUBJECTS")
     serial_box_w = 35 * mm; serial_box_h = 7 * mm; serial_x = width - margin - serial_box_w; serial_y = title_line_y - 2.5*mm 
@@ -304,9 +305,9 @@ def generate_caed_pdf(college, left_logo, right_logo):
     c.showPage(); c.save(); buffer.seek(0)
     return buffer
 
-def draw_diary_form(c, start_y, width, college, left_logo, right_logo):
+def draw_diary_form(c, start_y, width, inst_name, inst_address, inst_affiliation, inst_accreditation, left_logo, right_logo):
     margin = 10 * mm; content_w = width - 2*margin
-    y = draw_official_header(c, width, start_y, left_logo, right_logo, college, compact=True)
+    y = draw_official_header(c, width, start_y, left_logo, right_logo, inst_name, inst_address, inst_affiliation, inst_accreditation, compact=True)
     c.setFont("Helvetica-Bold", 12); c.drawCentredString(width/2, y - 5*mm, "RELIEVING SUPERINTENDENT'S DIARY")
     c.setFont("Helvetica-Bold", 10); c.drawCentredString(width/2, y - 10*mm, "B.E./B.Arch/M.Tech/M.B.A/M.C.A/M.Arch Semester Examination ...........................")
     y -= 20 * mm; c.setFont("Helvetica-Bold", 10)
@@ -330,11 +331,11 @@ def draw_diary_form(c, start_y, width, college, left_logo, right_logo):
     foot_y = table_top - table_h - 15*mm; c.setFont("Helvetica-Bold", 10)
     c.drawString(margin, foot_y, "Signature of Relieving Superintendent"); c.drawRightString(width - margin, foot_y, "Signature of Chief Superintendent")
 
-def generate_diary_pdf(college, left_logo, right_logo):
+def generate_diary_pdf(inst_name, inst_address, inst_affiliation, inst_accreditation, left_logo, right_logo):
     buffer = io.BytesIO(); c = canvas.Canvas(buffer, pagesize=A4); width, height = A4
-    draw_diary_form(c, height - 5*mm, width, college, left_logo, right_logo)
+    draw_diary_form(c, height - 5*mm, width, inst_name, inst_address, inst_affiliation, inst_accreditation, left_logo, right_logo)
     c.setDash(3, 3); c.line(10*mm, height/2, width - 10*mm, height/2); c.setDash(1, 0)
-    draw_diary_form(c, (height/2) - 5*mm, width, college, left_logo, right_logo)
+    draw_diary_form(c, (height/2) - 5*mm, width, inst_name, inst_address, inst_affiliation, inst_accreditation, left_logo, right_logo)
     c.showPage(); c.save(); buffer.seek(0)
     return buffer
 
@@ -414,13 +415,11 @@ def find_anchors_and_warp(image, config):
 def evaluate_image(image, multi_master_key, fill_percentage, config):
     flagged_log = []
     
-    # DYNAMIC IDENTITY MATRIX RECOGNITION (Pyzbar QR Processing Stream)
     harvested_usn, harvested_name, harvested_course = "Unknown USN", "Unknown Student", "Unknown Course"
     if pyzbar is not None:
         try:
             detected_qrs = pyzbar.decode(image)
             if not detected_qrs:
-                # Fallback to look inside a downscaled version if necessary
                 detected_qrs = pyzbar.decode(cv2.resize(image, (0,0), fx=0.5, fy=0.5))
             if detected_qrs:
                 qr_string = detected_qrs[0].data.decode('utf-8')
@@ -431,7 +430,6 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
             pass
 
     res = find_anchors_and_warp(image, config)
-    # MODIFICATION: Returning dictionary outputs structured strictly to matching requested column tracking format
     if res[0] == "TOO_DARK":
         return {
             "USN": "ERR_DARK", "Name": "Unreadable", "Course": "Unreadable", "Version": "N/A", 
@@ -515,7 +513,6 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
             q_current += 1
             curr_y += config['row_h']
             
-    # MODIFICATION: Structured outputs to follow requested structural alignment rules mapping sequence
     return {
         "USN": harvested_usn, "Name": harvested_name, "Course": harvested_course,
         "Version": detected_version, "Status": final_status, "Score": actual_score, 
@@ -530,12 +527,15 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
 class GenerationWorker(QThread):
     status_signal = Signal(str, str)
     
-    def __init__(self, state, save_path, fmt, col, crs, exam, qs):
+    def __init__(self, state, save_path, fmt, inst_name, inst_address, inst_affiliation, inst_accreditation, crs, exam, qs):
         super().__init__()
         self.state = state
         self.save_path = save_path
         self.fmt = fmt
-        self.col = col
+        self.inst_name = inst_name
+        self.inst_address = inst_address
+        self.inst_affiliation = inst_affiliation
+        self.inst_accreditation = inst_accreditation
         self.crs = crs
         self.exam = exam
         self.qs = qs
@@ -543,15 +543,16 @@ class GenerationWorker(QThread):
     def run(self):
         try:
             if self.fmt == "CAED Printout Sheet":
-                pdf_buf = generate_caed_pdf(self.col, self.state["left_logo"], self.state["right_logo"])
+                pdf_buf = generate_caed_pdf(self.inst_name, self.inst_address, self.inst_affiliation, self.inst_accreditation, self.state["left_logo"], self.state["right_logo"])
             elif self.fmt == "Relieving Superintendent Diary":
-                pdf_buf = generate_diary_pdf(self.col, self.state["left_logo"], self.state["right_logo"])
+                pdf_buf = generate_diary_pdf(self.inst_name, self.inst_address, self.inst_affiliation, self.inst_accreditation, self.state["left_logo"], self.state["right_logo"])
             else:
                 if self.state["students_df"] is None:
                     self.status_signal.emit("❌ Error: Please upload Student Details CSV first.", "red")
                     return
                 pdf_buf = generate_batch_omr_pdf(
-                    self.col, self.state["left_logo"], self.state["right_logo"], 
+                    self.inst_name, self.inst_address, self.inst_affiliation, self.inst_accreditation, 
+                    self.state["left_logo"], self.state["right_logo"], 
                     self.state["watermark"], self.state["students_df"], self.crs, self.exam, self.qs
                 )
                 
@@ -624,10 +625,24 @@ class GeneratorPanel(QWidget):
         layout.addWidget(QLabel("Select Sheet Format:"))
         layout.addWidget(self.format_dropdown)
         
-        self.college_name = QLineEdit("AMC ENGINEERING COLLEGE")
-        layout.addWidget(QLabel("College Branding Header text:"))
-        layout.addWidget(self.college_name)
+        # Institution Header Inputs
+        self.inst_name = QLineEdit("AMC ENGINEERING COLLEGE")
+        layout.addWidget(QLabel("Name of Institute:"))
+        layout.addWidget(self.inst_name)
         
+        self.inst_address = QLineEdit("AMC Campus, Bannerghatta Road, Bengaluru, Karnataka - 560083")
+        layout.addWidget(QLabel("Address of Institute:"))
+        layout.addWidget(self.inst_address)
+        
+        self.inst_affiliation = QLineEdit("Autonomous Institution Affiliated to VTU, Belagavi")
+        layout.addWidget(QLabel("Affiliation / Sub-Address Data:"))
+        layout.addWidget(self.inst_affiliation)
+
+        self.inst_accreditation = QLineEdit("Approved by AICTE, New Delhi | NAAC A+ Accredited")
+        layout.addWidget(QLabel("Accreditation Data:"))
+        layout.addWidget(self.inst_accreditation)
+        
+        # Course / OMR Layout Inputs
         self.course_code = QLineEdit("22CS61")
         self.lbl_cc = QLabel("Course / Subject Code:")
         layout.addWidget(self.lbl_cc)
@@ -717,12 +732,15 @@ class GeneratorPanel(QWidget):
         self.gen_btn.setEnabled(False)
         self.gen_btn.setText("⏳ Building Document Stream Architecture...")
         
-        col = self.college_name.text()
+        inst = self.inst_name.text()
+        add = self.inst_address.text()
+        aff = self.inst_affiliation.text()
+        acc = self.inst_accreditation.text()
         crs = self.course_code.text()
         exam = self.exam_type.currentText()
         qs = 50 if "50" in self.num_qs.currentText() else 100
         
-        self.worker = GenerationWorker(self.state, save_path, fmt, col, crs, exam, qs)
+        self.worker = GenerationWorker(self.state, save_path, fmt, inst, add, aff, acc, crs, exam, qs)
         self.worker.status_signal.connect(self.handle_finish)
         self.worker.start()
 
@@ -765,9 +783,11 @@ class EvaluatorPanel(QWidget):
         
         actions_layout = QHBoxLayout()
         self.btn_key = QPushButton("Upload Master Key Mapping")
+        self.btn_dl_key = QPushButton("Download Key Template")  # NEW BUTTON FOR VERSION MAPPING EXPORT
         self.lbl_key = QLabel("Using factory fallback structural key patterns")
         self.lbl_key.setStyleSheet("color: orange; font-style: italic;")
         actions_layout.addWidget(self.btn_key)
+        actions_layout.addWidget(self.btn_dl_key)
         actions_layout.addWidget(self.lbl_key)
         layout.addLayout(actions_layout)
         
@@ -822,7 +842,6 @@ class EvaluatorPanel(QWidget):
         self.batch_prg.setVisible(False)
         self.batch_txt = QLabel("")
         
-        # MODIFICATION: Reordered and structured the data frame columns to match your exact request
         self.table = QTableWidget()
         self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels([
@@ -842,6 +861,7 @@ class EvaluatorPanel(QWidget):
         self.btn_tab_calib.clicked.connect(lambda: self.sub_stack.setCurrentIndex(0))
         self.btn_tab_batch.clicked.connect(lambda: self.sub_stack.setCurrentIndex(1))
         self.btn_key.clicked.connect(self.load_key_matrix)
+        self.btn_dl_key.clicked.connect(self.download_key_template)
         self.btn_calib_scan.clicked.connect(self.run_calibration)
         self.btn_batch_upload.clicked.connect(self.run_batch)
         self.btn_batch_export.clicked.connect(self.export_csv)
@@ -851,6 +871,23 @@ class EvaluatorPanel(QWidget):
         for v in ['A', 'B', 'C', 'D']:
             kd[v] = {i: ['A', 'B', 'C', 'D'][(i-1) % 4] for i in range(1, 101)}
         self.key_dict = kd
+
+    def download_key_template(self):
+        save_path, _ = QFileDialog.getSaveFileName(self, "Download Key Template", "Master_Key_Template.csv", "CSV (*.csv)")
+        if save_path:
+            try:
+                rows = []
+                for i in range(1, 101):
+                    rows.append({
+                        "Question": i, "Version_A": "A", "Version_B": "B", 
+                        "Version_C": "C", "Version_D": "D"
+                    })
+                pd.DataFrame(rows).to_csv(save_path, index=False)
+                self.lbl_key.setText(f"✅ Template saved: {os.path.basename(save_path)}")
+                self.lbl_key.setStyleSheet("color: green; font-weight: bold;")
+            except Exception as e:
+                self.lbl_key.setText(f"❌ Template saving fault: {str(e)}")
+                self.lbl_key.setStyleSheet("color: red;")
 
     def load_key_matrix(self):
         path, _ = QFileDialog.getOpenFileName(self, "Load Key Mapping Framework", "", "CSV Configuration Data (*.csv)")
@@ -939,7 +976,6 @@ class EvaluatorPanel(QWidget):
         row_idx = self.table.rowCount()
         self.table.insertRow(row_idx)
         
-        # MODIFICATION: Re-ordered view-mapping inputs to display elements exactly according to the structured sequence
         self.table.setItem(row_idx, 0, QTableWidgetItem(str(row_data.get("USN", "Error"))))
         self.table.setItem(row_idx, 1, QTableWidgetItem(str(row_data.get("Name", "Error"))))
         self.table.setItem(row_idx, 2, QTableWidgetItem(str(row_data.get("Course", "Error"))))
@@ -958,11 +994,9 @@ class EvaluatorPanel(QWidget):
 
     def export_csv(self):
         if not self.results_cache: return
-        # MODIFICATION: Changed standard export file reference naming to point cleanly towards "OMR_Report_Manifest.csv"
         save_path, _ = QFileDialog.getSaveFileName(self, "Export Evaluation Statistics", "OMR_Report_Manifest.csv", "Spreadsheets (*.csv)")
         if save_path:
             try:
-                # Format exactly to matching the casing and requested column alignment layout order
                 export_ordered_fields = ["USN", "Name", "Course", "Version", "Status", "Score", "Confidence", "Flagged Questions", "Needs Moderation"]
                 df = pd.DataFrame(self.results_cache)
                 df = df.reindex(columns=export_ordered_fields)
