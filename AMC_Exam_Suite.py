@@ -17,8 +17,8 @@ except ImportError:
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
-    QListWidget, QStackedWidget, QLabel, QLineEdit, QPushButton, 
-    QComboBox, QSlider, QProgressBar, QTableWidget, QTableWidgetItem, 
+    QListWidget, QStackedWidget, QLabel, QLineEdit, QPushButton, \
+    QComboBox, QSlider, QProgressBar, QTableWidget, QTableWidgetItem, \
     QFileDialog, QFrame, QHeaderView
 )
 from PySide6.QtCore import Qt, QThread, Signal
@@ -42,7 +42,7 @@ DATASET_DIR = "omr_training_data/needs_review"
 os.makedirs(DATASET_DIR, exist_ok=True)
 
 # ==============================================================================
-# PART 1: OPTIMIZED PDF GENERATOR LOGIC (WITH LAYOUT IMPROVEMENTS)
+# PART 1: OPTIMIZED PDF GENERATOR LOGIC
 # ==============================================================================
 DROPOUT_GREY = colors.Color(0.6, 0.6, 0.6)
 OMR_PAGE_W, OMR_PAGE_H = A4
@@ -72,7 +72,6 @@ def draw_official_header(c, width, y_top, left_logo, right_logo, inst_name, inst
     c.setFillColor(colors.black)
     center_x = width / 2
     
-    # Render proportionate text sizes based on user inputs
     c.setFont("Helvetica-Bold", font_main)
     c.drawCentredString(center_x, y_top, inst_name)
     c.setFont("Helvetica", font_sub1)
@@ -104,10 +103,8 @@ def draw_omr_titles_and_serial(c, y_start, exam_type):
     omr_title_y = y_start - 9*mm
     c.drawCentredString(OMR_PAGE_W / 2, omr_title_y, "OMR ANSWER SHEET")
     
-    # MODIFICATION: Removed text box, moved serial no mapping to the far left
     c.setFont("Helvetica-Bold", 10)
     c.drawString(OMR_MARGIN, omr_title_y, "Serial No:  ________________")
-    
     return y_start - 11*mm
 
 def draw_omr_details_with_qr(c, y_start, student_name, usn, course_code):
@@ -124,7 +121,6 @@ def draw_omr_details_with_qr(c, y_start, student_name, usn, course_code):
     c.drawString(text_x, y_start - 13.5*mm, f"USN:           {usn}")
     c.drawString(text_x, y_start - 20*mm, f"Course Code:   {course_code}")
     
-    # MODIFICATION: Scaled QR Code larger to improve Pyzbar scanning reliability natively
     qr_data = f"{usn}|{student_name}|{course_code}"
     qr_code = qr.QrCodeWidget(qr_data)
     bounds = qr_code.getBounds()
@@ -133,7 +129,6 @@ def draw_omr_details_with_qr(c, y_start, student_name, usn, course_code):
     qr_size = 20 * mm
     d = Drawing(qr_size, qr_size, transform=[qr_size/width, 0, 0, qr_size/height, 0, 0])
     d.add(qr_code)
-    # Centered in the right-side box
     renderPDF.draw(d, c, mid_x + 12.5*mm, y_bottom + 1*mm)
     return y_bottom - 2*mm 
 
@@ -146,7 +141,6 @@ def draw_omr_instructions_compact(c, y_start):
     c.drawString(OMR_MARGIN + 3*mm, y_start - 3.5*mm, "INSTRUCTIONS TO STUDENTS:")
     c.setFont("Helvetica-Bold", 7.2)
     
-    # MODIFICATION: First instruction is now black.
     c.setFillColor(colors.black)
     c.drawString(OMR_MARGIN + 46*mm, y_start - 3.5*mm, "1. Before marking on OMR sheet verify your USN, Name and Course Code.")
     
@@ -156,7 +150,6 @@ def draw_omr_instructions_compact(c, y_start):
     c.drawString(OMR_MARGIN + 52*mm, y_start - 7.0*mm, "4. Darken the circle completely.")
     c.drawString(OMR_MARGIN + 52*mm, y_start - 10.0*mm, "5. Multiple markings are invalid.")
     
-    # MODIFICATION: Moved Correct/Wrong examples further right to prevent overlap.
     mid_right_x = OMR_PAGE_W - OMR_MARGIN - 50*mm
     labels_y = y_start - 4.5*mm
     c.setFont("Helvetica-Bold", 7); c.drawString(mid_right_x, labels_y, "CORRECT:")
@@ -340,7 +333,7 @@ def generate_diary_pdf(inst_name, inst_address, inst_affiliation, inst_accredita
     return buffer
 
 # ==============================================================================
-# PART 2: COMPUTER VISION EVALUATION & DECODING ARCHITECTURE
+# PART 2: ADVANCED COMPUTER VISION ENGINE WITH WARPED VERSION MAPPING
 # ==============================================================================
 CONFIG_50Q = {
     'warped_w': 1450, 'warped_h': 1380, 'cols': 3, 'rows': 17, 'col_w': 1500 / 3.0,    
@@ -410,7 +403,7 @@ def find_anchors_and_warp(image, config):
     warped_color = cv2.warpPerspective(image, M, (config['warped_w'], config['warped_h']))
     warped_gray = cv2.warpPerspective(gray, M, (config['warped_w'], config['warped_h']))
     warped_thresh = cv2.adaptiveThreshold(warped_gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 51, 15)
-    return best_corners, thresh, gray, version_anchor, warped_thresh, warped_color
+    return best_corners, thresh, gray, version_anchor, warped_thresh, warped_color, M
 
 def evaluate_image(image, multi_master_key, fill_percentage, config):
     flagged_log = []
@@ -444,33 +437,59 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
             "Flagged Questions": "Anchors Lost", "Needs Moderation": "YES"
         }, image.copy(), None
         
-    corners, thresh, gray, version_anchor, warped_thresh, warped_color = res
+    corners, thresh, gray, version_anchor, warped_thresh, warped_color, M = res
     debug_original = image.copy()
     for c in corners:
         cv2.rectangle(debug_original, (c['x']-15, c['y']-15), (c['x']+15, c['y']+15), (0, 0, 255), 3)
         
     flags_count, needs_moderation, detected_version = 0, "NO", "A"
+    
+    # SYSTEM CORRECTION: Robust Warped Version Code Mapping Engine
     if version_anchor is not None:
-        global_scale = np.sqrt((corners[1]['x'] - corners[0]['x'])**2 + (corners[1]['y'] - corners[0]['y'])**2) / (config['warped_w'] / 10.0)
-        b_start_x, b_spacing, b_rad = version_anchor['x'] + (68 * global_scale), 11 * global_scale, int(3.2 * global_scale)
-        b_area = 3.1415 * (b_rad ** 2)
+        v_pt = np.array([[[version_anchor['x'], version_anchor['y']]]], dtype="float32")
+        warped_v_pt = cv2.perspectiveTransform(v_pt, M)[0][0]
+        wx, wy = warped_v_pt[0], warped_v_pt[1]
+        
+        mm_to_px = config['warped_w'] / (150.0 if config['total_q'] == 50 else 190.0)
+        b_rad_px = int(3.2 * mm_to_px)
+        b_area_px = 3.1415 * (b_rad_px ** 2)
+        
         v_fills = []
         for i, opt in enumerate(['A', 'B', 'C', 'D']):
-            cx, cy = int(b_start_x + (i * b_spacing)), int(version_anchor['y'])
-            cv2.circle(debug_original, (cx, cy), b_rad, (255, 0, 0), 2)
-            mask = np.zeros(thresh.shape, dtype="uint8")
-            cv2.circle(mask, (cx, cy), b_rad, 255, -1)
-            v_fills.append((cv2.countNonZero(cv2.bitwise_and(thresh, thresh, mask=mask)) / b_area, i))
-        v_fills.sort(key=lambda x: x[0], reverse=True)
-        if v_fills[0][0] > fill_percentage:
-            detected_version = ['A', 'B', 'C', 'D'][v_fills[0][1]]
+            bx = int(wx + (71.0 + i * 11.0) * mm_to_px)
+            by = int(wy)
+            
+            cv2.circle(warped_color, (bx, by), b_rad_px, (255, 0, 0), 2)
+            
+            mask = np.zeros(warped_thresh.shape, dtype="uint8")
+            cv2.circle(mask, (bx, by), b_rad_px, 255, -1)
+            fill_ratio = cv2.countNonZero(cv2.bitwise_and(warped_thresh, warped_thresh, mask=mask)) / b_area_px
+            v_fills.append((fill_ratio, opt, bx, by))
+            
+        valid_versions = [v for v in v_fills if v[0] > fill_percentage]
+        
+        if len(valid_versions) == 1:
+            detected_version = valid_versions[0][1]
+            cv2.circle(warped_color, (valid_versions[0][2], valid_versions[0][3]), b_rad_px + 3, (0, 200, 0), 3)
+        elif len(valid_versions) > 1:
+            detected_version = "Multiple"
+            flags_count += 1; needs_moderation = "YES"
+            flagged_log.append("Version Multi-Marked")
+            for v in valid_versions:
+                cv2.circle(warped_color, (v[2], v[3]), b_rad_px + 3, (0, 165, 255), 3)
         else:
-            detected_version = "Blank"; flags_count += 1; needs_moderation = "YES"; flagged_log.append("Version Unclear")
+            detected_version = "Blank"
+            flags_count += 1; needs_moderation = "YES"
+            flagged_log.append("Version Blank")
+    else:
+        detected_version = "Missing"
+        flags_count += 1; needs_moderation = "YES"
+        flagged_log.append("Version Anchor Lost")
             
     actual_score, final_status = 0, "Evaluated Successfully"
     active_key = multi_master_key.get(detected_version, {}) if detected_version in ['A', 'B', 'C', 'D'] else multi_master_key.get('A', {})
     if detected_version not in ['A', 'B', 'C', 'D']:
-        final_status = "Warning: Invalid Version Code."
+        final_status = f"Warning: Version '{detected_version}' Invalid."
         
     q_current = 1
     bubble_area = 3.1415 * (config['b_radius'] ** 2)
@@ -504,8 +523,7 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
                     cv2.circle(warped_color, (bx, by), config['b_radius']+3, (0, 0, 255), 3)
             elif len(valid_marks) > 1:
                 ans_str = "Multiple"
-                flags_count += 1
-                needs_moderation = "YES"
+                flags_count += 1; needs_moderation = "YES"
                 flagged_log.append(f"Q{q_current}")
                 for fm in valid_marks:
                     bx, by = int(b_start_x + (fm[1] * config['b_spacing'])), int(curr_y)
@@ -522,23 +540,17 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
     }, debug_original, warped_color
 
 # ==============================================================================
-# PART 3: QT Worker Threads for Non-Blocking Operations
+# PART 3: QT WORKER THREADS
 # ==============================================================================
 class GenerationWorker(QThread):
     status_signal = Signal(str, str)
     
     def __init__(self, state, save_path, fmt, inst_name, inst_address, inst_affiliation, inst_accreditation, crs, exam, qs):
         super().__init__()
-        self.state = state
-        self.save_path = save_path
-        self.fmt = fmt
-        self.inst_name = inst_name
-        self.inst_address = inst_address
-        self.inst_affiliation = inst_affiliation
-        self.inst_accreditation = inst_accreditation
-        self.crs = crs
-        self.exam = exam
-        self.qs = qs
+        self.state = state; self.save_path = save_path; self.fmt = fmt
+        self.inst_name = inst_name; self.inst_address = inst_address
+        self.inst_affiliation = inst_affiliation; self.inst_accreditation = inst_accreditation
+        self.crs = crs; self.exam = exam; self.qs = qs
         
     def run(self):
         try:
@@ -569,10 +581,7 @@ class EvaluationWorker(QThread):
     
     def __init__(self, paths, key_dict, fill_val, cfg):
         super().__init__()
-        self.paths = paths
-        self.key_dict = key_dict
-        self.fill_val = fill_val
-        self.cfg = cfg
+        self.paths = paths; self.key_dict = key_dict; self.fill_val = fill_val; self.cfg = cfg
         
     def run(self):
         total = len(self.paths)
@@ -614,8 +623,7 @@ class GeneratorPanel(QWidget):
         super().__init__()
         self.state = global_state
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.setSpacing(14)
+        layout.setContentsMargins(30, 30, 30, 30); layout.setSpacing(14)
         
         title = QLabel("<h2>🖨️ Document Template Generator</h2>")
         layout.addWidget(title)
@@ -625,7 +633,6 @@ class GeneratorPanel(QWidget):
         layout.addWidget(QLabel("Select Sheet Format:"))
         layout.addWidget(self.format_dropdown)
         
-        # Institution Header Inputs
         self.inst_name = QLineEdit("AMC ENGINEERING COLLEGE")
         layout.addWidget(QLabel("Name of Institute:"))
         layout.addWidget(self.inst_name)
@@ -642,46 +649,32 @@ class GeneratorPanel(QWidget):
         layout.addWidget(QLabel("Accreditation Data:"))
         layout.addWidget(self.inst_accreditation)
         
-        # Course / OMR Layout Inputs
         self.course_code = QLineEdit("22CS61")
         self.lbl_cc = QLabel("Course / Subject Code:")
-        layout.addWidget(self.lbl_cc)
-        layout.addWidget(self.course_code)
+        layout.addWidget(self.lbl_cc); layout.addWidget(self.course_code)
         
         self.exam_type = QComboBox()
         self.exam_type.addItems(["Semester End Examination", "Continuous Internal Evaluation", "Lab Assessment Examination"])
         self.lbl_et = QLabel("Examination Description Identifier:")
-        layout.addWidget(self.lbl_et)
-        layout.addWidget(self.exam_type)
+        layout.addWidget(self.lbl_et); layout.addWidget(self.exam_type)
         
         self.num_qs = QComboBox()
         self.num_qs.addItems(["50 Questions", "100 Questions"])
         self.lbl_nq = QLabel("OMR Total Questions Architecture:")
-        layout.addWidget(self.lbl_nq)
-        layout.addWidget(self.num_qs)
+        layout.addWidget(self.lbl_nq); layout.addWidget(self.num_qs)
         
         btn_layout = QHBoxLayout()
-        self.btn_left = QPushButton("Upload Left Logo")
-        self.lbl_left = QLabel("Default: None")
-        self.btn_right = QPushButton("Upload Right Logo")
-        self.lbl_right = QLabel("Default: None")
-        
-        btn_layout.addWidget(self.btn_left)
-        btn_layout.addWidget(self.lbl_left)
-        btn_layout.addWidget(self.btn_right)
-        btn_layout.addWidget(self.lbl_right)
+        self.btn_left = QPushButton("Upload Left Logo"); self.lbl_left = QLabel("Default: None")
+        self.btn_right = QPushButton("Upload Right Logo"); self.lbl_right = QLabel("Default: None")
+        btn_layout.addWidget(self.btn_left); btn_layout.addWidget(self.lbl_left)
+        btn_layout.addWidget(self.btn_right); btn_layout.addWidget(self.lbl_right)
         layout.addLayout(btn_layout)
         
         btn_layout_2 = QHBoxLayout()
-        self.btn_watermark = QPushButton("Upload Watermark")
-        self.lbl_watermark = QLabel("Default: None")
-        self.btn_csv = QPushButton("Upload Student Dataset (CSV)")
-        self.lbl_csv = QLabel("Required for OMR sheets")
-        
-        btn_layout_2.addWidget(self.btn_watermark)
-        btn_layout_2.addWidget(self.lbl_watermark)
-        btn_layout_2.addWidget(self.btn_csv)
-        btn_layout_2.addWidget(self.lbl_csv)
+        self.btn_watermark = QPushButton("Upload Watermark"); self.lbl_watermark = QLabel("Default: None")
+        self.btn_csv = QPushButton("Upload Student Dataset (CSV)"); self.lbl_csv = QLabel("Required for OMR sheets")
+        btn_layout_2.addWidget(self.btn_watermark); btn_layout_2.addWidget(self.lbl_watermark)
+        btn_layout_2.addWidget(self.btn_csv); btn_layout_2.addWidget(self.lbl_csv)
         layout.addLayout(btn_layout_2)
         
         self.gen_btn = QPushButton("Generate PDF Document")
@@ -732,12 +725,9 @@ class GeneratorPanel(QWidget):
         self.gen_btn.setEnabled(False)
         self.gen_btn.setText("⏳ Building Document Stream Architecture...")
         
-        inst = self.inst_name.text()
-        add = self.inst_address.text()
-        aff = self.inst_affiliation.text()
-        acc = self.inst_accreditation.text()
-        crs = self.course_code.text()
-        exam = self.exam_type.currentText()
+        inst = self.inst_name.text(); add = self.inst_address.text()
+        aff = self.inst_affiliation.text(); acc = self.inst_accreditation.text()
+        crs = self.course_code.text(); exam = self.exam_type.currentText()
         qs = 50 if "50" in self.num_qs.currentText() else 100
         
         self.worker = GenerationWorker(self.state, save_path, fmt, inst, add, aff, acc, crs, exam, qs)
@@ -756,11 +746,11 @@ class EvaluatorPanel(QWidget):
         super().__init__()
         self.key_dict = None
         self.results_cache = []
+        self.last_analytical_matrix = None
         self.load_default_key()
         
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.setSpacing(12)
+        layout.setContentsMargins(30, 30, 30, 30); layout.setSpacing(12)
         
         title = QLabel("<h2>🎯 Advanced Computer Vision Engine</h2>")
         layout.addWidget(title)
@@ -771,8 +761,7 @@ class EvaluatorPanel(QWidget):
         
         self.slider_lbl = QLabel("Sensitivity Filter Threshold: 30%")
         self.ev_fill = QSlider(Qt.Horizontal)
-        self.ev_fill.setRange(5, 80)
-        self.ev_fill.setValue(30)
+        self.ev_fill.setRange(5, 80); self.ev_fill.setValue(30)
         self.ev_fill.valueChanged.connect(lambda v: self.slider_lbl.setText(f"Sensitivity Filter Threshold: {v}%"))
         
         ctrl_layout.addWidget(QLabel("Layout Mode:"))
@@ -783,7 +772,7 @@ class EvaluatorPanel(QWidget):
         
         actions_layout = QHBoxLayout()
         self.btn_key = QPushButton("Upload Master Key Mapping")
-        self.btn_dl_key = QPushButton("Download Key Template")  # NEW BUTTON FOR VERSION MAPPING EXPORT
+        self.btn_dl_key = QPushButton("Download Key Template")
         self.lbl_key = QLabel("Using factory fallback structural key patterns")
         self.lbl_key.setStyleSheet("color: orange; font-style: italic;")
         actions_layout.addWidget(self.btn_key)
@@ -794,8 +783,7 @@ class EvaluatorPanel(QWidget):
         tabs_bar = QHBoxLayout()
         self.btn_tab_calib = QPushButton("Calibration & Analytical Matrix")
         self.btn_tab_batch = QPushButton("Batch Verification Workflow")
-        tabs_bar.addWidget(self.btn_tab_calib)
-        tabs_bar.addWidget(self.btn_tab_batch)
+        tabs_bar.addWidget(self.btn_tab_calib); tabs_bar.addWidget(self.btn_tab_batch)
         layout.addLayout(tabs_bar)
         
         self.sub_stack = QStackedWidget()
@@ -804,9 +792,18 @@ class EvaluatorPanel(QWidget):
         # PAGE A: CALIBRATION WORKSPACE
         self.page_calib = QWidget()
         pc_layout = QVBoxLayout(self.page_calib)
+        
+        pc_btn_layout = QHBoxLayout()
         self.btn_calib_scan = QPushButton("Select Scan Image for Matrix Testing")
+        self.btn_save_calib_img = QPushButton("💾 Save Analytical Matrix Image (PNG)")
+        self.btn_save_calib_img.setEnabled(False)
+        pc_btn_layout.addWidget(self.btn_calib_scan)
+        pc_btn_layout.addWidget(self.btn_save_calib_img)
+        pc_layout.addLayout(pc_btn_layout)
+        
         self.debug_txt = QLabel("Awaiting computer vision telemetry configuration...")
         self.debug_txt.setWordWrap(True)
+        pc_layout.addWidget(self.debug_txt)
         
         img_display_row = QHBoxLayout()
         self.view_orig = QLabel("[Anchor Lock Display]")
@@ -821,9 +818,6 @@ class EvaluatorPanel(QWidget):
         
         img_display_row.addWidget(self.view_orig)
         img_display_row.addWidget(self.view_warp)
-        
-        pc_layout.addWidget(self.btn_calib_scan)
-        pc_layout.addWidget(self.debug_txt)
         pc_layout.addLayout(img_display_row)
         pc_layout.addStretch()
         
@@ -835,34 +829,29 @@ class EvaluatorPanel(QWidget):
         self.btn_batch_upload = QPushButton("Upload Multiple Scans Group")
         self.btn_batch_export = QPushButton("Export Aggregated CSV Report")
         self.btn_batch_export.setEnabled(False)
-        batch_btns.addWidget(self.btn_batch_upload)
-        batch_btns.addWidget(self.btn_batch_export)
+        batch_btns.addWidget(self.btn_batch_upload); batch_btns.addWidget(self.btn_batch_export)
         
-        self.batch_prg = QProgressBar()
-        self.batch_prg.setVisible(False)
+        self.batch_prg = QProgressBar(); self.batch_prg.setVisible(False)
         self.batch_txt = QLabel("")
         
-        self.table = QTableWidget()
-        self.table.setColumnCount(9)
+        self.table = QTableWidget(); self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels([
             "USN Target", "Name", "Course", "Version", "Status", 
             "Calculated Score", "Confidence Matrix", "Flagged Exceptions", "Needs Moderation"
         ])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         
-        pb_layout.addLayout(batch_btns)
-        pb_layout.addWidget(self.batch_prg)
-        pb_layout.addWidget(self.batch_txt)
-        pb_layout.addWidget(self.table)
+        pb_layout.addLayout(batch_btns); pb_layout.addWidget(self.batch_prg)
+        pb_layout.addWidget(self.batch_txt); pb_layout.addWidget(self.table)
         
-        self.sub_stack.addWidget(self.page_calib)
-        self.sub_stack.addWidget(self.page_batch)
+        self.sub_stack.addWidget(self.page_calib); self.sub_stack.addWidget(self.page_batch)
         
         self.btn_tab_calib.clicked.connect(lambda: self.sub_stack.setCurrentIndex(0))
         self.btn_tab_batch.clicked.connect(lambda: self.sub_stack.setCurrentIndex(1))
         self.btn_key.clicked.connect(self.load_key_matrix)
         self.btn_dl_key.clicked.connect(self.download_key_template)
         self.btn_calib_scan.clicked.connect(self.run_calibration)
+        self.btn_save_calib_img.clicked.connect(self.save_analytical_matrix_file)
         self.btn_batch_upload.clicked.connect(self.run_batch)
         self.btn_batch_export.clicked.connect(self.export_csv)
 
@@ -878,16 +867,12 @@ class EvaluatorPanel(QWidget):
             try:
                 rows = []
                 for i in range(1, 101):
-                    rows.append({
-                        "Question": i, "Version_A": "A", "Version_B": "B", 
-                        "Version_C": "C", "Version_D": "D"
-                    })
+                    rows.append({"Question": i, "Version_A": "A", "Version_B": "B", "Version_C": "C", "Version_D": "D"})
                 pd.DataFrame(rows).to_csv(save_path, index=False)
                 self.lbl_key.setText(f"✅ Template saved: {os.path.basename(save_path)}")
                 self.lbl_key.setStyleSheet("color: green; font-weight: bold;")
             except Exception as e:
-                self.lbl_key.setText(f"❌ Template saving fault: {str(e)}")
-                self.lbl_key.setStyleSheet("color: red;")
+                self.lbl_key.setText(f"❌ Template saving fault: {str(e)}"); self.lbl_key.setStyleSheet("color: red;")
 
     def load_key_matrix(self):
         path, _ = QFileDialog.getOpenFileName(self, "Load Key Mapping Framework", "", "CSV Configuration Data (*.csv)")
@@ -905,8 +890,7 @@ class EvaluatorPanel(QWidget):
                 self.lbl_key.setText(f"✅ Key matrix active: {os.path.basename(path)}")
                 self.lbl_key.setStyleSheet("color: green; font-weight: bold;")
             except Exception as e:
-                self.lbl_key.setText(f"❌ Key format mismatch: {str(e)}")
-                self.lbl_key.setStyleSheet("color: red;")
+                self.lbl_key.setText(f"❌ Key format mismatch: {str(e)}"); self.lbl_key.setStyleSheet("color: red;")
 
     def run_calibration(self):
         path, _ = QFileDialog.getOpenFileName(self, "Select Telemetry Sheet", "", "Images/PDF (*.png *.jpg *.jpeg *.pdf)")
@@ -932,13 +916,26 @@ class EvaluatorPanel(QWidget):
             self.display_matrix(orig_debug, self.view_orig)
             if warp_debug is not None:
                 self.display_matrix(warp_debug, self.view_warp)
+                self.last_analytical_matrix = warp_debug
+                self.btn_save_calib_img.setEnabled(True)
             else:
                 self.view_warp.setText("[Warp Missing]")
+                self.btn_save_calib_img.setEnabled(False)
                 
             log_metrics = f"<b>USN:</b> {res['USN']} | <b>Name:</b> {res['Name']} | <b>Course:</b> {res['Course']}<br><b>Score Vector:</b> {res['Score']} | <b>Confidence:</b> {res['Confidence']} | <b>Version:</b> {res['Version']}<br><b>Exception Diagnostics:</b> {res['Flagged Questions']}"
             self.debug_txt.setText(log_metrics)
         except Exception as e:
             self.debug_txt.setText(f"❌ Core processing failure: {str(e)}")
+
+    def save_analytical_matrix_file(self):
+        if self.last_analytical_matrix is not None:
+            save_path, _ = QFileDialog.getSaveFileName(self, "Save Analytical Matrix Image", "Analytical_Matrix_Capture.png", "Images (*.png *.jpg *.jpeg)")
+            if save_path:
+                try:
+                    cv2.imwrite(save_path, self.last_analytical_matrix)
+                    self.debug_txt.setText(self.debug_txt.text() + "<br><span style='color:green;'><b>✅ Analytical matrix image successfully saved!</b></span>")
+                except Exception as e:
+                    self.debug_txt.setText(self.debug_txt.text() + f"<br><span style='color:red;'><b>❌ Failed to save image: {str(e)}</b></span>")
 
     def display_matrix(self, mat, target_label):
         rgb_img = cv2.cvtColor(mat, cv2.COLOR_BGR2RGB)
@@ -951,10 +948,8 @@ class EvaluatorPanel(QWidget):
         paths, _ = QFileDialog.getOpenFileNames(self, "Select Scan Document Manifest", "", "Images/PDF Scans (*.png *.jpg *.jpeg *.pdf)")
         if not paths: return
         
-        self.table.setRowCount(0)
-        self.results_cache.clear()
-        self.batch_prg.setVisible(True)
-        self.batch_prg.setValue(0)
+        self.table.setRowCount(0); self.results_cache.clear()
+        self.batch_prg.setVisible(True); self.batch_prg.setValue(0)
         self.btn_batch_upload.setEnabled(False)
         
         cfg = CONFIG_50Q if "50" in self.example_qs.currentText() else CONFIG_100Q
@@ -989,8 +984,7 @@ class EvaluatorPanel(QWidget):
     def handle_batch_finished(self):
         self.batch_prg.setVisible(False)
         self.batch_txt.setText(f"✅ Processing completed successfully. Logged {len(self.results_cache)} sheets.")
-        self.btn_batch_upload.setEnabled(True)
-        self.btn_batch_export.setEnabled(True)
+        self.btn_batch_upload.setEnabled(True); self.btn_batch_export.setEnabled(True)
 
     def export_csv(self):
         if not self.results_cache: return
@@ -1006,51 +1000,38 @@ class EvaluatorPanel(QWidget):
                 self.batch_txt.setText(f"❌ Export file permission fault: {str(e)}")
 
 # ==============================================================================
-# PART 5: MAIN SYSTEM WINDOW PANEL CONTROLLER
+# PART 5: MAIN WINDOW MANAGER
 # ==============================================================================
 class AMCExamSuiteMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("AMC Exam Suite — Enterprise Blueprint (Qt Edition)")
+        self.setWindowTitle("AMC Exam Suite — Enterprise Edition")
         self.setGeometry(120, 120, 1200, 780)
         
-        self.global_state = {
-            "left_logo": None, "right_logo": None, "watermark": None, "students_df": None
-        }
+        self.global_state = {"left_logo": None, "right_logo": None, "watermark": None, "students_df": None}
         
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        
+        central_widget = QWidget(); self.setCentralWidget(central_widget)
         root_layout = QHBoxLayout(central_widget)
-        root_layout.setContentsMargins(0, 0, 0, 0)
-        root_layout.setSpacing(0)
+        root_layout.setContentsMargins(0, 0, 0, 0); root_layout.setSpacing(0)
         
-        self.sidebar = QListWidget()
-        self.sidebar.setFixedWidth(240)
-        self.sidebar.addItems([
-            "📖 Sheet Template Generator",
-            "🎯 Computer Vision Evaluator"
-        ])
+        self.sidebar = QListWidget(); self.sidebar.setFixedWidth(240)
+        self.sidebar.addItems(["📖 Sheet Template Generator", "🎯 Computer Vision Evaluator"])
         
         self.viewport_stack = QStackedWidget()
         self.gen_panel = GeneratorPanel(self.global_state)
         self.eval_panel = EvaluatorPanel()
         
-        self.viewport_stack.addWidget(self.gen_panel)
-        self.viewport_stack.addWidget(self.eval_panel)
-        
-        root_layout.addWidget(self.sidebar)
-        root_layout.addWidget(self.viewport_stack)
+        self.viewport_stack.addWidget(self.gen_panel); self.viewport_stack.addWidget(self.eval_panel)
+        root_layout.addWidget(self.sidebar); root_layout.addWidget(self.viewport_stack)
         
         self.sidebar.currentRowChanged.connect(self.viewport_stack.setCurrentIndex)
         self.sidebar.setCurrentRow(0)
 
 # ==============================================================================
-# PART 6: APPLICATION INITIALIZATION FRAMEWORK & CSS THEME
+# PART 6: CORE THEMING APPLICATION BOOTSTRAPPER
 # ==============================================================================
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
     app.setStyleSheet("""
         QMainWindow { background-color: #f8fafc; }
         QListWidget { background-color: #0f172a; color: #cbd5e1; font-size: 14px; border: none; }
@@ -1072,7 +1053,6 @@ if __name__ == "__main__":
         QProgressBar { text-align: center; border: 1px solid #cbd5e1; border-radius: 4px; background: #f1f5f9; }
         QProgressBar::chunk { background-color: #2563eb; }
     """)
-    
     suite_window = AMCExamSuiteMainWindow()
     suite_window.show()
     sys.exit(app.exec())
