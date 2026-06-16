@@ -445,16 +445,15 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
     flags_count, needs_moderation, detected_version = 0, "NO", "A"
     
     # ==================================================================
-    # SYSTEM CORRECTION: INDEPENDENT UNWARPED VERSION ENGINE
+    # SYSTEM CORRECTION: ROBUST UNWARPED VERSION MAPPER
     # ==================================================================
+    tl, tr = corners[0], corners[1]
+    mm_dist_x = 145.0 if config['total_q'] <= 50 else 185.0
+    px_dist_x = np.sqrt((tr['x'] - tl['x'])**2 + (tr['y'] - tl['y'])**2)
+    px_per_mm = px_dist_x / mm_dist_x
+    
     if version_anchor is not None:
-        # 1. Use the version block's own black square to determine exact scale (Pixels per mm)
-        px_per_mm = version_anchor['w'] / 5.0  # Anchor is physically 5x5 mm
-        
-        # 2. Calculate the exact page tilt angle using the top two main anchors
-        tl, tr = corners[0], corners[1]
         angle_rad = np.arctan2(tr['y'] - tl['y'], tr['x'] - tl['x'])
-        
         vx, vy = version_anchor['x'], version_anchor['y']
         
         b_rad_px = int(3.2 * px_per_mm)
@@ -463,32 +462,16 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
         
         v_fills = []
         for i, opt in enumerate(['A', 'B', 'C', 'D']):
-            # Distance from anchor center to bubble center is 71mm, spacing is 11mm
             dist_mm = 71.0 + (i * 11.0)
             dist_px = dist_mm * px_per_mm
-            
-            # 3. Plot the point along the tilt angle to handle rotated scans
             bx = int(vx + dist_px * np.cos(angle_rad))
             by = int(vy + dist_px * np.sin(angle_rad))
             
-            # Draw on the original debug image (not the warped one)
             cv2.circle(debug_original, (bx, by), b_rad_px, (255, 0, 0), 2)
-            
             mask = np.zeros(thresh.shape, dtype="uint8")
             cv2.circle(mask, (bx, by), inner_rad_px, 255, -1)
-            
-            # 4. Evaluate in the unwarped threshold image
             fill_ratio = cv2.countNonZero(cv2.bitwise_and(thresh, thresh, mask=mask)) / inner_area_px
             v_fills.append((fill_ratio, opt, bx, by))
-            
-        try:
-            roi_w = int(120 * px_per_mm)
-            roi_h = int(20 * px_per_mm)
-            v_roi_x1 = max(0, int(vx - 5 * px_per_mm))
-            v_roi_y1 = max(0, int(vy - 10 * px_per_mm))
-            version_roi = debug_original[v_roi_y1:v_roi_y1+roi_h, v_roi_x1:v_roi_x1+roi_w]
-            cv2.imwrite(f"DEBUG_Version_Unwarped_{harvested_usn}.jpg", version_roi)
-        except Exception: pass
             
         version_threshold = fill_percentage * 0.75 
         valid_versions = [v for v in v_fills if v[0] > version_threshold]
@@ -512,13 +495,23 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
         flagged_log.append("Version Anchor Lost")
         
     # ==================================================================
-    # MAIN QUESTION EVALUATION (Remains in Warped Space)
+    # MAIN QUESTION EVALUATION (With Inverse Matrix Full Sheet Mapping)
     # ==================================================================
     actual_score, final_status = 0, "Evaluated Successfully"
     active_key = multi_master_key.get(detected_version, {}) if detected_version in ['A', 'B', 'C', 'D'] else multi_master_key.get('A', {})
     if detected_version not in ['A', 'B', 'C', 'D']:
         final_status = f"Warning: Version '{detected_version}' Invalid."
         
+    _, M_inv = cv2.invert(M)
+    warp_px_per_mm = config['warped_w'] / (150.0 if config['total_q'] <= 50 else 190.0)
+    unwarp_ratio = px_per_mm / warp_px_per_mm
+    
+    def draw_eval(bx, by, r, color, thick):
+        cv2.circle(warped_color, (bx, by), r + 3, color, thick)
+        pt = np.array([[[bx, by]]], dtype="float32")
+        upt = cv2.perspectiveTransform(pt, M_inv)[0][0]
+        cv2.circle(debug_original, (int(upt[0]), int(upt[1])), int((r+3) * unwarp_ratio), color, thick)
+
     q_current = 1
     bubble_area = 3.1415 * (config['b_radius'] ** 2)
     for col in range(config['cols']):
@@ -530,6 +523,7 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
             fills = []
             for i in range(4):
                 bx, by = int(b_start_x + (i * config['b_spacing'])), int(curr_y)
+                # Just outline search area on warped space so we don't clutter full sheet
                 cv2.circle(warped_color, (bx, by), config['b_radius'], (255, 180, 180), 1)
                 mask = np.zeros(warped_thresh.shape, dtype="uint8")
                 cv2.circle(mask, (bx, by), config['b_radius'], 255, -1)
@@ -546,16 +540,16 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
                 if not isinstance(correct_answers, list): correct_answers = [correct_answers]
                 if ans_str in correct_answers:
                     actual_score += 1
-                    cv2.circle(warped_color, (bx, by), config['b_radius']+3, (0, 200, 0), 3)
+                    draw_eval(bx, by, config['b_radius'], (0, 200, 0), 3)
                 else:
-                    cv2.circle(warped_color, (bx, by), config['b_radius']+3, (0, 0, 255), 3)
+                    draw_eval(bx, by, config['b_radius'], (0, 0, 255), 3)
             elif len(valid_marks) > 1:
                 ans_str = "Multiple"
                 flags_count += 1; needs_moderation = "YES"
                 flagged_log.append(f"Q{q_current}")
                 for fm in valid_marks:
                     bx, by = int(b_start_x + (fm[1] * config['b_spacing'])), int(curr_y)
-                    cv2.circle(warped_color, (bx, by), config['b_radius']+3, (0, 165, 255), 3)
+                    draw_eval(bx, by, config['b_radius'], (0, 165, 255), 3)
             q_current += 1
             curr_y += config['row_h']
             
@@ -823,7 +817,7 @@ class EvaluatorPanel(QWidget):
         
         pc_btn_layout = QHBoxLayout()
         self.btn_calib_scan = QPushButton("Select Scan Image for Matrix Testing")
-        self.btn_save_calib_img = QPushButton("💾 Save Analytical Matrix Image (PNG)")
+        self.btn_save_calib_img = QPushButton("💾 Save Full Analytical Matrix (PNG)")
         self.btn_save_calib_img.setEnabled(False)
         pc_btn_layout.addWidget(self.btn_calib_scan)
         pc_btn_layout.addWidget(self.btn_save_calib_img)
@@ -834,12 +828,12 @@ class EvaluatorPanel(QWidget):
         pc_layout.addWidget(self.debug_txt)
         
         img_display_row = QHBoxLayout()
-        self.view_orig = QLabel("[Anchor Lock Display]")
+        self.view_orig = QLabel("[Full Sheet Matrix Display]")
         self.view_orig.setFixedSize(360, 360)
         self.view_orig.setStyleSheet("border: 1px dashed #cbd5e1; background: #f1f5f9;")
         self.view_orig.setAlignment(Qt.AlignCenter)
         
-        self.view_warp = QLabel("[Matrix Alignment Display]")
+        self.view_warp = QLabel("[Warped Target Display]")
         self.view_warp.setFixedSize(360, 360)
         self.view_warp.setStyleSheet("border: 1px dashed #cbd5e1; background: #f1f5f9;")
         self.view_warp.setAlignment(Qt.AlignCenter)
@@ -944,7 +938,22 @@ class EvaluatorPanel(QWidget):
             self.display_matrix(orig_debug, self.view_orig)
             if warp_debug is not None:
                 self.display_matrix(warp_debug, self.view_warp)
-                self.last_analytical_matrix = warp_debug
+                
+                # Combine the Full Sheet and the Warped Sheet into one comprehensive export image
+                h_orig, w_orig = orig_debug.shape[:2]
+                h_warp, w_warp = warp_debug.shape[:2]
+                
+                scale_factor = h_orig / float(h_warp)
+                new_w_warp = int(w_warp * scale_factor)
+                warp_resized = cv2.resize(warp_debug, (new_w_warp, h_orig))
+                
+                # Add Header Labels
+                cv2.putText(orig_debug, "FULL SHEET (INVERSE MAPPED)", (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 2.5, (0, 0, 255), 6)
+                cv2.putText(warp_resized, "WARPED QUESTION MATRIX", (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 2.5, (0, 0, 255), 6)
+                
+                combined_matrix = np.hstack((orig_debug, warp_resized))
+                
+                self.last_analytical_matrix = combined_matrix
                 self.btn_save_calib_img.setEnabled(True)
             else:
                 self.view_warp.setText("[Warp Missing]")
@@ -957,11 +966,11 @@ class EvaluatorPanel(QWidget):
 
     def save_analytical_matrix_file(self):
         if self.last_analytical_matrix is not None:
-            save_path, _ = QFileDialog.getSaveFileName(self, "Save Analytical Matrix Image", "Analytical_Matrix_Capture.png", "Images (*.png *.jpg *.jpeg)")
+            save_path, _ = QFileDialog.getSaveFileName(self, "Save Full Analytical Matrix", "Full_Analytical_Matrix.png", "Images (*.png *.jpg *.jpeg)")
             if save_path:
                 try:
                     cv2.imwrite(save_path, self.last_analytical_matrix)
-                    self.debug_txt.setText(self.debug_txt.text() + "<br><span style='color:green;'><b>✅ Analytical matrix image successfully saved!</b></span>")
+                    self.debug_txt.setText(self.debug_txt.text() + "<br><span style='color:green;'><b>✅ Full sheet analytical matrix saved successfully!</b></span>")
                 except Exception as e:
                     self.debug_txt.setText(self.debug_txt.text() + f"<br><span style='color:red;'><b>❌ Failed to save image: {str(e)}</b></span>")
 
