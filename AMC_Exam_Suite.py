@@ -58,16 +58,13 @@ def draw_official_header(c, width, y_top, left_logo, right_logo, inst_name, inst
 
     margin_x = 8 * mm if is_caed else 10 * mm
     
-    # Calculate bottom boundary to prevent overlapping titles
-    lowest_point = y_top - (3 * spacing) - 2 * mm
-    
     if left_logo:
         try:
-            left_logo_size = logo_size * 1.4  # Increased left logo size
+            left_logo_size = logo_size * 1.35  # Enlarged size
+            # Shifted UP by 4mm to align nicely with the right logo
+            left_y = y_top - left_logo_size + (spacing/2) + 4 * mm 
             img = ImageReader(left_logo)
-            c.drawImage(img, margin_x, y_top - left_logo_size + (spacing/2), width=left_logo_size, height=left_logo_size, mask='auto', preserveAspectRatio=True)
-            logo_bottom = y_top - left_logo_size + (spacing/2)
-            lowest_point = min(lowest_point, logo_bottom - 2*mm) # Push content down if logo is large
+            c.drawImage(img, margin_x, left_y, width=left_logo_size, height=left_logo_size, mask='auto', preserveAspectRatio=True)
         except: pass
         
     if right_logo:
@@ -90,7 +87,8 @@ def draw_official_header(c, width, y_top, left_logo, right_logo, inst_name, inst
     c.drawCentredString(center_x, y_top - (3*spacing), inst_accreditation)
     
     c.restoreState()
-    return lowest_point
+    # Returned to standard static spacing to completely remove the huge gap
+    return y_top - (3*spacing) - 4*mm
 
 def draw_omr_watermark(c, watermark_stream):
     if watermark_stream:
@@ -803,7 +801,6 @@ class EvaluatorPanel(QWidget):
         actions_layout = QHBoxLayout()
         self.btn_key = QPushButton("Upload Master Key Mapping")
         
-        # SYSTEM CORRECTION: Replaced the download button with explicit formatting instructions
         self.lbl_key = QLabel("Expected CSV cols: Question, Version_A, Version_B, Version_C, Version_D\nUsing factory fallback structural key patterns")
         self.lbl_key.setStyleSheet("color: orange; font-style: italic;")
         
@@ -935,7 +932,6 @@ class EvaluatorPanel(QWidget):
             if warp_debug is not None:
                 self.display_matrix(warp_debug, self.view_warp)
                 
-                # Combine the Full Sheet and the Warped Sheet into one comprehensive export image
                 h_orig, w_orig = orig_debug.shape[:2]
                 h_warp, w_warp = warp_debug.shape[:2]
                 
@@ -943,7 +939,6 @@ class EvaluatorPanel(QWidget):
                 new_w_warp = int(w_warp * scale_factor)
                 warp_resized = cv2.resize(warp_debug, (new_w_warp, h_orig))
                 
-                # Add Header Labels
                 cv2.putText(orig_debug, "FULL SHEET (INVERSE MAPPED)", (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 2.5, (0, 0, 255), 6)
                 cv2.putText(warp_resized, "WARPED QUESTION MATRIX", (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 2.5, (0, 0, 255), 6)
                 
