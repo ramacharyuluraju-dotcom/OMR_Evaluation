@@ -452,7 +452,21 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
         
         mm_to_px = config['warped_w'] / (150.0 if config['total_q'] == 50 else 190.0)
         b_rad_px = int(3.2 * mm_to_px)
-        b_area_px = 3.1415 * (b_rad_px ** 2)
+        
+        # FIX: Calculate an Inner Radius so the mask ignores the printed black bubble outline
+        inner_rad_px = int(b_rad_px * 0.85)
+        inner_area_px = 3.1415 * (inner_rad_px ** 2)
+
+        # FIX: Output a debug image locally to verify exact mapping coordinates visually
+        try:
+            v_roi_x1 = max(0, int(wx + 60 * mm_to_px))
+            v_roi_x2 = min(warped_color.shape[1], int(wx + 120 * mm_to_px))
+            v_roi_y1 = max(0, int(wy - 15 * mm_to_px))
+            v_roi_y2 = min(warped_color.shape[0], int(wy + 15 * mm_to_px))
+            version_roi = warped_color[v_roi_y1:v_roi_y2, v_roi_x1:v_roi_x2]
+            cv2.imwrite(f"DEBUG_Version_ROI_{harvested_usn}.jpg", version_roi)
+        except Exception:
+            pass
         
         v_fills = []
         for i, opt in enumerate(['A', 'B', 'C', 'D']):
@@ -462,11 +476,15 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
             cv2.circle(warped_color, (bx, by), b_rad_px, (255, 0, 0), 2)
             
             mask = np.zeros(warped_thresh.shape, dtype="uint8")
-            cv2.circle(mask, (bx, by), b_rad_px, 255, -1)
-            fill_ratio = cv2.countNonZero(cv2.bitwise_and(warped_thresh, warped_thresh, mask=mask)) / b_area_px
+            # Draw smaller radius into the mask to avoid border interference
+            cv2.circle(mask, (bx, by), inner_rad_px, 255, -1) 
+            
+            fill_ratio = cv2.countNonZero(cv2.bitwise_and(warped_thresh, warped_thresh, mask=mask)) / inner_area_px
             v_fills.append((fill_ratio, opt, bx, by))
             
-        valid_versions = [v for v in v_fills if v[0] > fill_percentage]
+        # FIX: Lower the threshold slightly just for Version block to be more forgiving
+        version_threshold = fill_percentage * 0.75 
+        valid_versions = [v for v in v_fills if v[0] > version_threshold]
         
         if len(valid_versions) == 1:
             detected_version = valid_versions[0][1]
