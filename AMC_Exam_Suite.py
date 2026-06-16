@@ -444,57 +444,64 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
         
     flags_count, needs_moderation, detected_version = 0, "NO", "A"
     
-    # SYSTEM CORRECTION: Robust Warped Version Code Mapping Engine
+    # ==================================================================
+    # SYSTEM CORRECTION: INDEPENDENT UNWARPED VERSION ENGINE
+    # ==================================================================
     if version_anchor is not None:
-        v_pt = np.array([[[version_anchor['x'], version_anchor['y']]]], dtype="float32")
-        warped_v_pt = cv2.perspectiveTransform(v_pt, M)[0][0]
-        wx, wy = warped_v_pt[0], warped_v_pt[1]
+        # 1. Use the version block's own black square to determine exact scale (Pixels per mm)
+        px_per_mm = version_anchor['w'] / 5.0  # Anchor is physically 5x5 mm
         
-        mm_to_px = config['warped_w'] / (150.0 if config['total_q'] == 50 else 190.0)
-        b_rad_px = int(3.2 * mm_to_px)
+        # 2. Calculate the exact page tilt angle using the top two main anchors
+        tl, tr = corners[0], corners[1]
+        angle_rad = np.arctan2(tr['y'] - tl['y'], tr['x'] - tl['x'])
         
-        # FIX: Calculate an Inner Radius so the mask ignores the printed black bubble outline
-        inner_rad_px = int(b_rad_px * 0.85)
+        vx, vy = version_anchor['x'], version_anchor['y']
+        
+        b_rad_px = int(3.2 * px_per_mm)
+        inner_rad_px = max(1, int(b_rad_px * 0.80))
         inner_area_px = 3.1415 * (inner_rad_px ** 2)
-
-        # FIX: Output a debug image locally to verify exact mapping coordinates visually
-        try:
-            v_roi_x1 = max(0, int(wx + 60 * mm_to_px))
-            v_roi_x2 = min(warped_color.shape[1], int(wx + 120 * mm_to_px))
-            v_roi_y1 = max(0, int(wy - 15 * mm_to_px))
-            v_roi_y2 = min(warped_color.shape[0], int(wy + 15 * mm_to_px))
-            version_roi = warped_color[v_roi_y1:v_roi_y2, v_roi_x1:v_roi_x2]
-            cv2.imwrite(f"DEBUG_Version_ROI_{harvested_usn}.jpg", version_roi)
-        except Exception:
-            pass
         
         v_fills = []
         for i, opt in enumerate(['A', 'B', 'C', 'D']):
-            bx = int(wx + (71.0 + i * 11.0) * mm_to_px)
-            by = int(wy)
+            # Distance from anchor center to bubble center is 71mm, spacing is 11mm
+            dist_mm = 71.0 + (i * 11.0)
+            dist_px = dist_mm * px_per_mm
             
-            cv2.circle(warped_color, (bx, by), b_rad_px, (255, 0, 0), 2)
+            # 3. Plot the point along the tilt angle to handle rotated scans
+            bx = int(vx + dist_px * np.cos(angle_rad))
+            by = int(vy + dist_px * np.sin(angle_rad))
             
-            mask = np.zeros(warped_thresh.shape, dtype="uint8")
-            # Draw smaller radius into the mask to avoid border interference
-            cv2.circle(mask, (bx, by), inner_rad_px, 255, -1) 
+            # Draw on the original debug image (not the warped one)
+            cv2.circle(debug_original, (bx, by), b_rad_px, (255, 0, 0), 2)
             
-            fill_ratio = cv2.countNonZero(cv2.bitwise_and(warped_thresh, warped_thresh, mask=mask)) / inner_area_px
+            mask = np.zeros(thresh.shape, dtype="uint8")
+            cv2.circle(mask, (bx, by), inner_rad_px, 255, -1)
+            
+            # 4. Evaluate in the unwarped threshold image
+            fill_ratio = cv2.countNonZero(cv2.bitwise_and(thresh, thresh, mask=mask)) / inner_area_px
             v_fills.append((fill_ratio, opt, bx, by))
             
-        # FIX: Lower the threshold slightly just for Version block to be more forgiving
+        try:
+            roi_w = int(120 * px_per_mm)
+            roi_h = int(20 * px_per_mm)
+            v_roi_x1 = max(0, int(vx - 5 * px_per_mm))
+            v_roi_y1 = max(0, int(vy - 10 * px_per_mm))
+            version_roi = debug_original[v_roi_y1:v_roi_y1+roi_h, v_roi_x1:v_roi_x1+roi_w]
+            cv2.imwrite(f"DEBUG_Version_Unwarped_{harvested_usn}.jpg", version_roi)
+        except Exception: pass
+            
         version_threshold = fill_percentage * 0.75 
         valid_versions = [v for v in v_fills if v[0] > version_threshold]
         
         if len(valid_versions) == 1:
             detected_version = valid_versions[0][1]
-            cv2.circle(warped_color, (valid_versions[0][2], valid_versions[0][3]), b_rad_px + 3, (0, 200, 0), 3)
+            cv2.circle(debug_original, (valid_versions[0][2], valid_versions[0][3]), b_rad_px + 3, (0, 200, 0), 3)
         elif len(valid_versions) > 1:
             detected_version = "Multiple"
             flags_count += 1; needs_moderation = "YES"
             flagged_log.append("Version Multi-Marked")
             for v in valid_versions:
-                cv2.circle(warped_color, (v[2], v[3]), b_rad_px + 3, (0, 165, 255), 3)
+                cv2.circle(debug_original, (v[2], v[3]), b_rad_px + 3, (0, 165, 255), 3)
         else:
             detected_version = "Blank"
             flags_count += 1; needs_moderation = "YES"
@@ -503,7 +510,10 @@ def evaluate_image(image, multi_master_key, fill_percentage, config):
         detected_version = "Missing"
         flags_count += 1; needs_moderation = "YES"
         flagged_log.append("Version Anchor Lost")
-            
+        
+    # ==================================================================
+    # MAIN QUESTION EVALUATION (Remains in Warped Space)
+    # ==================================================================
     actual_score, final_status = 0, "Evaluated Successfully"
     active_key = multi_master_key.get(detected_version, {}) if detected_version in ['A', 'B', 'C', 'D'] else multi_master_key.get('A', {})
     if detected_version not in ['A', 'B', 'C', 'D']:
