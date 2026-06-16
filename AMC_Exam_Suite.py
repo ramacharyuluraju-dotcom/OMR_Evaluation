@@ -57,11 +57,19 @@ def draw_official_header(c, width, y_top, left_logo, right_logo, inst_name, inst
         logo_size = 22 * mm; font_main = 16; font_sub1 = 9.5; font_sub2 = 9; font_sub3 = 8.5; spacing = 5 * mm
 
     margin_x = 8 * mm if is_caed else 10 * mm
+    
+    # Calculate bottom boundary to prevent overlapping titles
+    lowest_point = y_top - (3 * spacing) - 2 * mm
+    
     if left_logo:
         try:
+            left_logo_size = logo_size * 1.4  # Increased left logo size
             img = ImageReader(left_logo)
-            c.drawImage(img, margin_x, y_top - logo_size + (spacing/2), width=logo_size, height=logo_size, mask='auto', preserveAspectRatio=True)
+            c.drawImage(img, margin_x, y_top - left_logo_size + (spacing/2), width=left_logo_size, height=left_logo_size, mask='auto', preserveAspectRatio=True)
+            logo_bottom = y_top - left_logo_size + (spacing/2)
+            lowest_point = min(lowest_point, logo_bottom - 2*mm) # Push content down if logo is large
         except: pass
+        
     if right_logo:
         try:
             img = ImageReader(right_logo)
@@ -82,7 +90,7 @@ def draw_official_header(c, width, y_top, left_logo, right_logo, inst_name, inst
     c.drawCentredString(center_x, y_top - (3*spacing), inst_accreditation)
     
     c.restoreState()
-    return y_top - (3*spacing) - 2*mm
+    return lowest_point
 
 def draw_omr_watermark(c, watermark_stream):
     if watermark_stream:
@@ -170,7 +178,7 @@ def draw_signatures_block(c, y_start):
     c.setFillColor(colors.black); c.setFont("Helvetica-Bold", 8)
     c.drawCentredString(OMR_MARGIN + col_w/2, y_start - 3.5*mm, "Student's Signature")
     c.drawCentredString(OMR_MARGIN + 1.5*col_w, y_start - 3.5*mm, "Date")
-    c.drawCentredString(OMR_MARGIN + 2.5*col_w, y_start - 3.5*mm, "Invigilator's Signature")
+    c.drawCentredString(OMR_MARGIN + 2.5*col_w, y_start - 3.5*mm, "Invigilator's Signature and date")
     return sig_bottom - 2*mm
 
 def draw_isolated_version_block(c, y_start):
@@ -794,11 +802,12 @@ class EvaluatorPanel(QWidget):
         
         actions_layout = QHBoxLayout()
         self.btn_key = QPushButton("Upload Master Key Mapping")
-        self.btn_dl_key = QPushButton("Download Key Template")
-        self.lbl_key = QLabel("Using factory fallback structural key patterns")
+        
+        # SYSTEM CORRECTION: Replaced the download button with explicit formatting instructions
+        self.lbl_key = QLabel("Expected CSV cols: Question, Version_A, Version_B, Version_C, Version_D\nUsing factory fallback structural key patterns")
         self.lbl_key.setStyleSheet("color: orange; font-style: italic;")
+        
         actions_layout.addWidget(self.btn_key)
-        actions_layout.addWidget(self.btn_dl_key)
         actions_layout.addWidget(self.lbl_key)
         layout.addLayout(actions_layout)
         
@@ -871,7 +880,6 @@ class EvaluatorPanel(QWidget):
         self.btn_tab_calib.clicked.connect(lambda: self.sub_stack.setCurrentIndex(0))
         self.btn_tab_batch.clicked.connect(lambda: self.sub_stack.setCurrentIndex(1))
         self.btn_key.clicked.connect(self.load_key_matrix)
-        self.btn_dl_key.clicked.connect(self.download_key_template)
         self.btn_calib_scan.clicked.connect(self.run_calibration)
         self.btn_save_calib_img.clicked.connect(self.save_analytical_matrix_file)
         self.btn_batch_upload.clicked.connect(self.run_batch)
@@ -882,19 +890,6 @@ class EvaluatorPanel(QWidget):
         for v in ['A', 'B', 'C', 'D']:
             kd[v] = {i: ['A', 'B', 'C', 'D'][(i-1) % 4] for i in range(1, 101)}
         self.key_dict = kd
-
-    def download_key_template(self):
-        save_path, _ = QFileDialog.getSaveFileName(self, "Download Key Template", "Master_Key_Template.csv", "CSV (*.csv)")
-        if save_path:
-            try:
-                rows = []
-                for i in range(1, 101):
-                    rows.append({"Question": i, "Version_A": "A", "Version_B": "B", "Version_C": "C", "Version_D": "D"})
-                pd.DataFrame(rows).to_csv(save_path, index=False)
-                self.lbl_key.setText(f"✅ Template saved: {os.path.basename(save_path)}")
-                self.lbl_key.setStyleSheet("color: green; font-weight: bold;")
-            except Exception as e:
-                self.lbl_key.setText(f"❌ Template saving fault: {str(e)}"); self.lbl_key.setStyleSheet("color: red;")
 
     def load_key_matrix(self):
         path, _ = QFileDialog.getOpenFileName(self, "Load Key Mapping Framework", "", "CSV Configuration Data (*.csv)")
@@ -912,7 +907,8 @@ class EvaluatorPanel(QWidget):
                 self.lbl_key.setText(f"✅ Key matrix active: {os.path.basename(path)}")
                 self.lbl_key.setStyleSheet("color: green; font-weight: bold;")
             except Exception as e:
-                self.lbl_key.setText(f"❌ Key format mismatch: {str(e)}"); self.lbl_key.setStyleSheet("color: red;")
+                self.lbl_key.setText(f"❌ Key format mismatch: {str(e)}\nExpected CSV cols: Question, Version_A, Version_B, Version_C, Version_D")
+                self.lbl_key.setStyleSheet("color: red;")
 
     def run_calibration(self):
         path, _ = QFileDialog.getOpenFileName(self, "Select Telemetry Sheet", "", "Images/PDF (*.png *.jpg *.jpeg *.pdf)")
